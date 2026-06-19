@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+// todopro — TodoPro CLI 入口
+// 转发所有参数到全局安装的 init.js。
+// 用法: todopro init [--platform <name>] [--dir <path>]
+//       todopro --update
+//       todopro --uninstall [--platform <name>]
+const { spawn } = require('child_process');
+const path = require('path');
+const os = require('os');
+
+const initPath = path.join(os.homedir(), '.agents', 'skills', 'todopro', 'src', 'install', 'init.js');
+const proc = spawn('node', [initPath, ...process.argv.slice(2)], { stdio: 'inherit' });
+proc.on('close', (code) => process.exit(code || 0));

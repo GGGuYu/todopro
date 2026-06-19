@@ -149,7 +149,14 @@ function installGlobal(root) {
   const oldSkillsDir = path.join(GLOBAL_DIR, 'skills');
   if (fs.existsSync(oldSkillsDir)) { removeDir(oldSkillsDir); }
 
-  ok('全局安装完成(src/ + skills/ 已复制到 ' + GLOBAL_DIR + ')');
+  // 复制 bin/todopro CLI 入口
+  fs.mkdirSync(path.join(GLOBAL_DIR, 'bin'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'bin/todopro'), path.join(GLOBAL_DIR, 'bin/todopro'));
+  fs.chmodSync(path.join(GLOBAL_DIR, 'bin/todopro'), 0o755);
+
+  ok('全局安装完成(src/ + skills/ + bin/ 已复制到 ' + GLOBAL_DIR + ')');
+  info('将以下行添加到 ~/.zshrc 或 ~/.bashrc 即可全局使用 todopro 命令:');
+  console.log('  ' + ANSI.cyan + 'export PATH="' + path.join(GLOBAL_DIR, 'bin') + ':$PATH"' + ANSI.reset);
   return GLOBAL_DIR;
 }
 
