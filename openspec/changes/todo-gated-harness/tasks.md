@@ -14,10 +14,10 @@
 
 ## 3. 核心判断逻辑(平台无关,Stop 钩子决策表)
 
-- [ ] 3.1 定义统一内部事件表示 `{event, round_wrote_todo, session, todos}` 与统一决策表示 `{action: "allow"|"block", inject_text, reset_flags, do_cleanup}`
-- [ ] 3.2 实现 `src/core/decide-stop.js`:Stop 钩子决策表(无会话/paused/abandoned→放行;有 pending+推进→放行;有 pending+没推进+nudge<2→阻断注入四选一;有 pending+没推进+nudge≥2→放行交还用户;全完成+未 review+rv_nudge<2→阻断注入 review;全完成+未 review+rv_nudge≥2→放行跳过;全完成+已 review→放行)
-- [ ] 3.3 实现计数器复位逻辑(nudge→推进归零;rv_nudge→review 后新增 todo 归零;review 硬上限 3 次/会话)
-- [ ] 3.4 实现子 agent 糊弄兜底:review 轮结束且 subagent_fired_this_round=false → rv_nudge++
+- [x] 3.1 定义统一内部事件表示 `{event, round_wrote_todo, session, todos}` 与统一决策表示 `{action: "allow"|"block", inject_text, reset_flags, do_cleanup}`
+- [x] 3.2 实现 `src/core/decide-stop.js`:Stop 钩子决策表(无会话/paused/abandoned→放行;有 pending+推进→放行;有 pending+没推进+nudge<2→阻断注入四选一;有 pending+没推进+nudge≥2→放行交还用户;全完成+未 review+rv_nudge<2→阻断注入 review;全完成+未 review+rv_nudge≥2→放行跳过;全完成+已 review→放行)
+- [x] 3.3 实现计数器复位逻辑(nudge→推进归零;rv_nudge→review 后新增 todo 归零;review 硬上限 3 次/会话)
+- [x] 3.4 实现子 agent 糊弄兜底:review 轮结束且 subagent_fired_this_round=false → rv_nudge++
 
 ## 4. 注入提示词模板(平台无关)
 
@@ -33,8 +33,8 @@
 
 ## 6. TodoPro SKILL.md
 
-- [ ] 6.1 编写 `skills/todopro/SKILL.md`:description 暴露增量价值("比内置 todo 多提供完成时的独立 review 和漏洞复查,适合多步/多文件改造任务"),触发线偏严(预计超过 3 步/涉及多文件/有验证需求)
-- [ ] 6.2 在 SKILL.md 写明 TodoPro 工具用法(全量替换、扩展 status、稳定 id、pause/abandon/acknowledge_stall 出口)
+- [x] 6.1 编写 `skills/todopro/SKILL.md`:description 暴露增量价值("比内置 todo 多提供完成时的独立 review 和漏洞复查,适合多步/多文件改造任务"),触发线偏严(预计超过 3 步/涉及多文件/有验证需求)
+- [x] 6.2 在 SKILL.md 写明 TodoPro 工具用法(全量替换、扩展 status、稳定 id、pause/abandon/acknowledge_stall 出口)
 
 ## 7. Claude Code 适配层(首选最小闭环平台)
 
@@ -69,12 +69,12 @@
 
 ## 11. init 引导程序
 
-- [ ] 11.1 实现 `src/install/init.js`:检测平台(存在 .claude/ / codex config / hana 插件目录),接受 `--platform` 参数跳过自动检测
-- [ ] 11.2 实现 Claude Code 安装:merge hooks 进 .claude/settings.json(不覆盖用户已有),放核心脚本与适配层,放 SKILL.md 到技能目录
-- [ ] 11.3 实现 Codex 安装:merge `[hooks]` 进 config.toml,放脚本与 SKILL.md
-- [ ] 11.4 实现 Hana 安装:装 full-access 插件(extensions/) + restricted 插件(tools/、skills/)
-- [ ] 11.5 init 完成后输出重载提示("请重启/重载以使钩子生效")
-- [ ] 11.6 init 检测 Node 存在性,缺失则报错退出
+- [x] 11.1 实现 `src/install/init.js`:检测平台(存在 .claude/ / codex config / hana 插件目录),接受 `--platform` 参数跳过自动检测
+- [x] 11.2 实现 Claude Code 安装:merge hooks 进 .claude/settings.json(不覆盖用户已有),放核心脚本与适配层,放 SKILL.md 到技能目录
+- [x] 11.3 实现 Codex 安装:merge `[hooks]` 进 config.toml,放脚本与 SKILL.md
+- [x] 11.4 实现 Hana 安装:装 full-access 插件(extensions/) + restricted 插件(tools/、skills/)
+- [x] 11.5 init 完成后输出重载提示("请重启/重载以使钩子生效")
+- [x] 11.6 init 检测 Node 存在性,缺失则报错退出
 
 ## 12. 跨平台一致性验证
 
