@@ -139,6 +139,9 @@ function installGlobal(root) {
   copyDir(path.join(root, 'src/platforms/hana'), path.join(GLOBAL_DIR, 'src/platforms/hana'));
   // 复制 skills/todopro/
   copyDir(path.join(root, 'skills/todopro'), path.join(GLOBAL_DIR, 'skills/todopro'));
+  // 复制 src/install/init.js 自身,删仓库后仍可 --update/--uninstall
+  fs.mkdirSync(path.join(GLOBAL_DIR, 'src/install'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'src/install/init.js'), path.join(GLOBAL_DIR, 'src/install/init.js'));
 
   ok('全局安装完成(src/ + skills/ 已复制到 ' + GLOBAL_DIR + ')');
   return GLOBAL_DIR;
@@ -677,7 +680,11 @@ async function main() {
     }
 
     // 执行卸载
-    uninstallAll(platforms, args.dir, true);
+    // Bug 修复:只在全卸载(--platform all 或所有平台都选了)时才删全局。
+    // 单平台卸载(如只卸 codex)不该删全局,否则同时装的 Claude Code 会断。
+    const removeGlobal = platforms.length >= 3 ||
+      (platforms.includes('claude-code') && platforms.includes('codex') && platforms.includes('hana'));
+    uninstallAll(platforms, args.dir, removeGlobal);
     return;
   }
 

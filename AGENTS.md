@@ -441,7 +441,7 @@ src/
 │   ├── run-post-tool-use.js       # 共享 PostToolUse 执行
 │   └── run-todopro-tool.js        # 共享 TodoPro 工具入口
 ├── platforms/
-│   ├── claude-code/               # 5 文件:util/stop-hook/post-tool-use/subagent-stop/todopro-tool + settings.hooks.json
+│   ├── claude-code/               # 5 文件:util/stop-hook/post-tool-use/subagent-stop/todopro-tool(hook 配置在 init.js 内联构建,不再用 settings.hooks.json)
 │   ├── codex/                     # 5 文件:同结构,I/O 用 exit2+stderr
 │   └── hana/                      # extensions/index.js + tools/todopro.js + manifest.json
 └── install/
