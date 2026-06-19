@@ -38,21 +38,21 @@
 
 ## 7. Claude Code 适配层(首选最小闭环平台)
 
-- [ ] 7.1 实现 `src/platforms/claude-code/stop-hook.js`:读 Claude Code Stop payload → 归一化事件 → 调 decide-stop → 反归一化为 exit 2 + additionalContext(或 exit 0 放行)
-- [ ] 7.2 实现 `src/platforms/claude-code/post-tool-use.js`:matcher 锁定 TodoPro 工具 → 置 wrote_todo_this_round;matcher 锁定编辑类工具 → 记 touched-files
-- [ ] 7.3 实现 `src/platforms/claude-code/subagent-stop.js`:置 subagent_fired_this_round=true
-- [ ] 7.4 实现 TodoPro 工具入口(Claude Code 自定义工具或 SKILL 引导的脚本调用):接收全量 todos → 调 todo-store 写盘 → 生成 MD 镜像 → 返回 oldTodos
-- [ ] 7.5 编写 `.claude/settings.json` 的 hooks 配置片段(Stop/PostToolUse/SubagentStop 指向对应脚本)
+- [x] 7.1 实现 `src/platforms/claude-code/stop-hook.js`:读 Claude Code Stop payload → 归一化事件 → 调 decide-stop → 反归一化为 exit 2 + additionalContext(或 exit 0 放行)
+- [x] 7.2 实现 `src/platforms/claude-code/post-tool-use.js`:matcher 锁定 TodoPro 工具 → 置 wrote_todo_this_round;matcher 锁定编辑类工具 → 记 touched-files
+- [x] 7.3 实现 `src/platforms/claude-code/subagent-stop.js`:置 subagent_fired_this_round=true
+- [x] 7.4 实现 TodoPro 工具入口(Claude Code 自定义工具或 SKILL 引导的脚本调用):接收全量 todos → 调 todo-store 写盘 → 生成 MD 镜像 → 返回 oldTodos
+- [x] 7.5 编写 `.claude/settings.json` 的 hooks 配置片段(Stop/PostToolUse/SubagentStop 指向对应脚本)
 
 ## 8. Claude Code 最小闭环验证
 
-- [ ] 8.1 验证小任务零开销:不调 TodoPro 工具时,所有钩子不触发,与裸跑无异
-- [ ] 8.2 验证循环出口兜底:建 TodoPro todo 后中途停止不维护 → 阻断注入四选一;选维护 → 放行;选 pause/abandon/acknowledge_stall → 放行
-- [ ] 8.3 验证 nudge 熔断:连续 2 次不推进 → 第 3 次交还用户放行
-- [ ] 8.4 验证完成 review:全部 completed → 阻断注入 review 引导 → 主 Agent 起原生子 agent → 子 agent 自读文件 + git diff → 分档输出回主 Agent
-- [ ] 8.5 验证 review 熔断与硬上限:子 agent 糊弄不起 → rv_nudge++ → 熔断;连续 3 次 review 后第 4 次直接放行
-- [ ] 8.6 验证清理:放行退出后 .todopro/ 运行时文件被删,review-subagent-prompt.md 保留
-- [ ] 8.7 验证优雅退化:模型用内置 TodoWrite 不用 TodoPro 时,机制完全不触发
+- [x] 8.1 验证小任务零开销:不调 TodoPro 工具时,所有钩子不触发,与裸跑无异
+- [x] 8.2 验证循环出口兜底:建 TodoPro todo 后中途停止不维护 → 阻断注入四选一;选维护 → 放行;选 pause/abandon/acknowledge_stall → 放行
+- [x] 8.3 验证 nudge 熔断:连续 2 次不推进 → 第 3 次交还用户放行
+- [x] 8.4 验证完成 review:全部 completed → 阻断注入 review 引导 → 主 Agent 起原生子 agent → 子 agent 自读文件 + git diff → 分档输出回主 Agent
+- [x] 8.5 验证 review 熔断与硬上限:子 agent 糊弄不起 → rv_nudge++ → 熔断;连续 3 次 review 后第 4 次直接放行
+- [x] 8.6 验证清理:放行退出后 .todopro/ 运行时文件被删,review-subagent-prompt.md 保留
+- [x] 8.7 验证优雅退化:模型用内置 TodoWrite 不用 TodoPro 时,机制完全不触发
 
 ## 9. Codex 适配层
 
