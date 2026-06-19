@@ -225,6 +225,15 @@ function installClaudeCode(dir, globalDir) {
   fs.copyFileSync(path.join(globalDir, 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   ok('SKILL.md 已放到 ' + path.relative(dir, skillDir));
 
+  // 3.5 创建用户级软链 ~/.claude/skills/todopro → ~/.agents/skills/todopro
+  //    (Claude Code 从 ~/.claude/skills/ 发现用户级 skill，其他 60+ skill 都如此)
+  const userClaudeSkills = path.join(os.homedir(), '.claude', 'skills');
+  fs.mkdirSync(userClaudeSkills, { recursive: true });
+  const userSkillLink = path.join(userClaudeSkills, 'todopro');
+  const relTarget = path.relative(userClaudeSkills, globalDir);
+  const linkMethod = symlinkOrCopy(relTarget, userSkillLink);
+  ok('用户级 skill 软链已创建: ~/.claude/skills/todopro → ~/.agents/skills/todopro (' + linkMethod + ')');
+
   // 4. 预置 review-subagent-prompt.md + README.md 到项目 .todopro/
   const todoproDir = path.join(dir, '.todopro');
   fs.mkdirSync(todoproDir, { recursive: true });
@@ -396,9 +405,13 @@ function uninstallClaudeCode(dir) {
     } catch (e) { warn('settings.json 解析失败,跳过 hook 清理: ' + e.message); }
   }
 
-  // 2. 删 .claude/skills/todopro/(SKILL.md)
+  // 2. 删 .claude/skills/todopro/(项目级 SKILL.md)
   const skillDir = path.join(claudeDir, 'skills', 'todopro');
   if (fs.existsSync(skillDir)) { removeDir(skillDir); ok('已删 ' + path.relative(dir, skillDir)); }
+
+  // 2.5 删用户级软链 ~/.claude/skills/todopro
+  const userSkillLink = path.join(os.homedir(), '.claude', 'skills', 'todopro');
+  if (fs.existsSync(userSkillLink)) { removeDir(userSkillLink); ok('已删用户级 skill 软链 ~/.claude/skills/todopro'); }
 
   // 3. 删 .todopro/(预置文件 + 运行时文件)
   const todoproDir = path.join(dir, '.todopro');
@@ -640,6 +653,15 @@ async function main() {
   if (args.update) {
     info('--update:只刷新全局安装...');
     installGlobal(root);
+    // 同时刷新用户级软链(首次安装时可能缺)
+    const userClaudeSkills = path.join(os.homedir(), '.claude', 'skills');
+    if (fs.existsSync(userClaudeSkills) || fs.existsSync(path.join(os.homedir(), '.claude'))) {
+      fs.mkdirSync(userClaudeSkills, { recursive: true });
+      const userSkillLink = path.join(userClaudeSkills, 'todopro');
+      const relTarget = path.relative(userClaudeSkills, GLOBAL_DIR);
+      symlinkOrCopy(relTarget, userSkillLink);
+      ok('用户级 skill 软链已刷新: ~/.claude/skills/todopro');
+    }
     ok('全局安装已更新。hooks 和 SKILL.md 不变(如需更新重跑 init --platform)');
     return;
   }
