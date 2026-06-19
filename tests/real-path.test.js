@@ -153,7 +153,9 @@ test('R7 全完成经 Bash → review引导 → 子agent → 放行+清理', () 
   subagentStop(DIR);
   const out2 = stopHook(DIR);
   assert.ok(!out2.includes('"decision":"block"'), 'review子agent后应放行');
-  assert.ok(!fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json')), '应清理');
+  // P0-1:review-completed 不立即 cleanup(保留 review_total_count)。再 Stop 一次(reviewed-exit)才清理
+  stopHook(DIR);
+  assert.ok(!fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json')), '应清理(reviewed-exit 后)');
 });
 
 // R9:P1-2 回归——非 review 轮起的子 agent 不算 review 完成

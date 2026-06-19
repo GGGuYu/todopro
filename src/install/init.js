@@ -5,10 +5,11 @@
 //
 // spec: harness-install
 // 用法:
-//   node src/install/init.js                       # 自动检测平台
-//   node src/install/init.js --platform claude-code # 显式指定
+//   node src/install/init.js                       # 交互式选择平台(推荐)
+//   node src/install/init.js --platform claude-code # 静默安装指定平台
 //   node src/install/init.js --platform codex
 //   node src/install/init.js --platform hana
+//   node src/install/init.js --platform all        # 安装全部平台
 //
 // 平台检测标志:
 //   claude-code: 项目根有 .claude/ 目录
@@ -19,12 +20,27 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const readline = require('readline');
 
 // ─── 工具函数 ───
 function info(msg) { console.log('  ' + msg); }
 function ok(msg) { console.log('  ✓ ' + msg); }
 function warn(msg) { console.log('  ! ' + msg); }
 function err(msg) { console.error('  ✗ ' + msg); }
+
+// ─── ANSI / 终端工具 ───
+const ANSI = {
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  dim: '\x1b[2m',
+  reset: '\x1b[0m',
+  // 游标
+  cursorUp: (n) => `\x1b[${n}A`,
+  cursorShow: '\x1b[?25h',
+  cursorHide: '\x1b[?25l',
+  clearLine: '\x1b[K',
+};
 
 function parseArgs(argv) {
   const args = { platform: null, dir: process.cwd() };
@@ -53,6 +69,24 @@ function detectPlatform(dir) {
   if (fs.existsSync(path.join(hanaHome, 'plugins'))) return 'hana';
   return null;
 }
+
+// ─── 检测所有存在的平台(返回数组,用于交互式提示) ───
+function detectPlatforms(dir) {
+  const found = [];
+  if (fs.existsSync(path.join(dir, '.claude'))) found.push('claude-code');
+  if (fs.existsSync(path.join(os.homedir(), '.codex', 'config.toml')) ||
+      fs.existsSync(path.join(dir, 'config.toml'))) found.push('codex');
+  const hanaHome = process.env.HANA_HOME || path.join(os.homedir(), '.openhanako');
+  if (fs.existsSync(path.join(hanaHome, 'plugins'))) found.push('hana');
+  return found;
+}
+
+// 平台标签映射(展示用)
+const PLATFORM_LABELS = {
+  'claude-code': 'Claude Code',
+  'codex':       'Codex',
+  'hana':        'HanaAgent',
+};
 
 // ─── Node 检测 ───
 function checkNode() {
@@ -253,43 +287,191 @@ function copyFile(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
-// ─── 主流程 ───
-function main() {
+// ─── 交互式多选提示(↑/↓ 空格 回车, 零依赖纯 Node) ───
+function multiSelectPrompt(options) {
+  // options: [{ name, label, detected }]
+  // returns: Promise<string[]> — 选中的 name 数组
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+
+    // 非 TTY → 回退:只返回已检测到的平台
+    if (!stdin.isTTY) {
+      return resolve(options.filter(o => o.detected).map(o => o.name));
+    }
+
+    let selected = options.map(o => !!o.detected);
+    let current = 0;
+    let renderCount = 0;
+    let warningMsg = '';
+    const BASE_ROWS = options.length + 2; // 标题 + 选项 + 脚注
+
+    function totalRows() {
+      return BASE_ROWS + (warningMsg ? 1 : 0);
+    }
+
+    function render() {
+      const rows = totalRows();
+      if (renderCount > 0) {
+        process.stdout.write(ANSI.cursorUp(rows));
+      }
+
+      let out = '';
+      // 标题
+      out += '  \x1b[2m?\x1b[0m 请选择要安装的平台 (\x1b[2m↑/↓\x1b[0m 导航, \x1b[2m空格\x1b[0m 切换, \x1b[2m回车\x1b[0m 确认):\n';
+      // 选项
+      for (let i = 0; i < options.length; i++) {
+        const isCur = i === current;
+        const isSel = selected[i];
+        const detected = options[i].detected;
+        const checkbox = isSel ? `${ANSI.green}◼${ANSI.reset}` : '◻';
+        const pointer = isCur ? `${ANSI.cyan}❯${ANSI.reset}` : ' ';
+        const labelStyle = isCur ? ANSI.cyan : '';
+        const detectedTag = detected ? `  ${ANSI.green}✓ 已检测到${ANSI.reset}` : '';
+        out += `  ${pointer} ${checkbox} ${labelStyle}${options[i].label}${ANSI.reset}${detectedTag}${ANSI.clearLine}\n`;
+      }
+      // 脚注
+      out += `  ${ANSI.dim}(↑/↓ 导航, 空格切换, 回车确认, a 全选/取消, Ctrl+C 退出)${ANSI.reset}${ANSI.clearLine}`;
+      // 警告
+      if (warningMsg) {
+        out += `\n  ${ANSI.yellow}!${ANSI.reset} ${warningMsg}${ANSI.clearLine}`;
+      }
+
+      process.stdout.write(out);
+      renderCount++;
+    }
+
+    function cleanup() {
+      stdin.setRawMode(false);
+      stdin.pause();
+      stdin.removeListener('keypress', onKeypress);
+      process.stdout.write(ANSI.cursorShow);
+    }
+
+    function onKeypress(str, key) {
+      warningMsg = ''; // 按键即清警告
+
+      if (key.name === 'up' || (key.name === 'k' && key.ctrl)) {
+        current = (current - 1 + options.length) % options.length;
+        render();
+      } else if (key.name === 'down' || (key.name === 'j' && key.ctrl)) {
+        current = (current + 1) % options.length;
+        render();
+      } else if (key.name === 'space') {
+        selected[current] = !selected[current];
+        render();
+      } else if (key.name === 'return' || key.name === 'enter') {
+        const hasSel = selected.some(s => s);
+        if (hasSel) {
+          cleanup();
+          resolve(options.filter((_, i) => selected[i]).map(o => o.name));
+        } else {
+          warningMsg = '至少选择一项';
+          render();
+        }
+      } else if (key.name === 'c' && key.ctrl) {
+        cleanup();
+        console.log();
+        process.exit(0);
+      } else if (str === 'a') {
+        const allSel = selected.every(s => s);
+        selected = selected.map(() => !allSel);
+        render();
+      }
+    }
+
+    // 进入原始模式
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    process.stdout.write(ANSI.cursorHide);
+
+    stdin.on('keypress', onKeypress);
+    render();
+  });
+}
+
+// ─── 安装所有选中平台 ───
+function installAll(platforms, dir) {
+  let count = 0;
+  for (const p of platforms) {
+    count++;
+    console.log();
+    info(`[${count}/${platforms.length}] 安装到 ${PLATFORM_LABELS[p] || p}...`);
+    switch (p) {
+      case 'claude-code': installClaudeCode(dir); break;
+      case 'codex': installCodex(dir); break;
+      case 'hana': installHana(dir); break;
+      default: warn('未知平台:' + p + ',跳过');
+    }
+  }
+  console.log();
+  ok(`全部完成 — 已安装 ${count} 个平台。`);
+  info('请重启对应平台(或重载会话)以使 hooks 生效。');
+}
+
+// ─── 主流程(现在支持交互式) ───
+async function main() {
   const args = parseArgs(process.argv);
   console.log('TodoPro init\n');
 
   if (args.help) {
-    console.log('用法:node src/install/init.js [--platform claude-code|codex|hana] [--dir <project-dir>]');
-    console.log('  --platform  显式指定目标平台(否则自动检测)');
-    console.log('  --dir       目标项目目录(默认当前目录)');
+    console.log('用法:');
+    console.log('  node src/install/init.js                       # 交互式选择平台');
+    console.log('  node src/install/init.js --platform <name>     # 静默安装指定平台');
+    console.log('  node src/install/init.js --platform all        # 安装全部平台');
+    console.log('  node src/install/init.js --platform <name> --dir <path>  # 指定项目目录');
+    console.log('');
+    console.log('可用平台:claude-code | codex | hana');
     return;
   }
 
   // 11.6 检测 Node
   if (!checkNode()) { process.exit(1); }
 
-  // 11.1 检测平台
-  let platform = args.platform;
-  if (!platform) {
-    platform = detectPlatform(args.dir);
-    if (!platform) {
-      err('未检测到任何平台。请用 --platform 显式指定:claude-code | codex | hana');
-      process.exit(1);
+  // 解析平台参数
+  let platforms = [];
+
+  if (args.platform) {
+    // 非交互模式
+    if (args.platform === 'all') {
+      platforms = ['claude-code', 'codex', 'hana'];
+    } else {
+      const valid = ['claude-code', 'codex', 'hana'];
+      if (!valid.includes(args.platform)) {
+        err('未知平台:' + args.platform + '(支持:claude-code | codex | hana)');
+        process.exit(1);
+      }
+      platforms = [args.platform];
     }
-    info('检测到平台:' + platform);
+    info('指定平台:' + platforms.join(', '));
   } else {
-    info('指定平台:' + platform);
+    // 交互式模式:检测已存在平台 → 弹出多选提示
+    const detected = detectPlatforms(args.dir);
+    const allPlatforms = [
+      { name: 'claude-code', label: 'Claude Code', detected: detected.includes('claude-code') },
+      { name: 'codex',       label: 'Codex',        detected: detected.includes('codex') },
+      { name: 'hana',        label: 'HanaAgent',    detected: detected.includes('hana') },
+    ];
+
+    console.log('  ' + ANSI.dim + '已检测到:'
+      + (detected.length ? detected.map(p => PLATFORM_LABELS[p]).join(', ') : '无')
+      + ANSI.reset);
+    console.log();
+
+    platforms = await multiSelectPrompt(allPlatforms);
+    if (platforms.length === 0) {
+      console.log('\n  已取消，未安装任何平台。');
+      return;
+    }
+    // 提示结束 → 换行(把后续输出和提示区域分开)
+    process.stdout.write('\n');
+    console.log('  ' + ANSI.green + '已选择: ' + platforms.map(p => PLATFORM_LABELS[p]).join(', ') + ANSI.reset);
   }
 
-  console.log();
-  switch (platform) {
-    case 'claude-code': installClaudeCode(args.dir); break;
-    case 'codex': installCodex(args.dir); break;
-    case 'hana': installHana(args.dir); break;
-    default:
-      err('未知平台:' + platform + '(支持:claude-code | codex | hana)');
-      process.exit(1);
-  }
+  // 执行安装
+  installAll(platforms, args.dir);
 }
 
-main();
+main().catch(e => {
+  err(e.message);
+  process.exit(1);
+});

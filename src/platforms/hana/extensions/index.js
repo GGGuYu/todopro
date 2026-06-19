@@ -81,9 +81,11 @@ module.exports = function (pi) {
   });
 
   // ─── agent_end ↔ SubagentStop(子 agent 结束)───
-  // 注意:agent_end 在主 agent 结束时也触发。Pi 无单独的"子 agent 结束"事件,
-  // 需结合 context 判断是否在子 agent 内(若 context 有 agentType/isSubagent 标志)。
-  // 兜底:agent_end 时置 subagent_fired(若本轮有过任何子 agent 调用)。
+  // @depends-on-pi-agentType:以下判断依赖 context.agentType 字段区分主/子 agent。
+  //   Pi 文档的 agent_end event 结构是否有此字段尚未实机验证(AGENTS.md 已知限制 6)。
+  //   若 Pi 不提供 agentType,Hana 上 SubagentStop 永不触发,review 子 agent 无法启动,
+  //   review 永远完不成,最后熔断兜底。需实机验证后调整此分支。
+  // 注意:agent_end 在主 agent 结束时也触发。Pi 无单独的"子 agent 结束"事件。
   // 此处为骨架,实际需根据 Pi 版本的事件字段调整。
   pi.on('agent_end', (event, context) => {
     try {

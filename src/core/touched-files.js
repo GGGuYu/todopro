@@ -15,10 +15,10 @@ const todoStore = require('./todo-store');
 // 判断哪些工具算"编辑类"。平台适配层把工具名归一化后传这里。
 // 编辑类:写/改/删文件的操作。读操作不记。
 // 含 Codex 的 apply_patch(Codex 的文件编辑工具)。
+// P2-4:删了 create/save(Claude Code 无此工具名,matcher 也没配,死代码)。
 const EDIT_TOOL_PATTERNS = [
   /^write$/i, /^edit$/i, /^multi_edit$/i, /^notebookedit$/i,
   /^apply_patch$/i,       // Codex 的文件编辑工具
-  /^create$/i, /^save$/i,
   // 不含 bash/shell:touched-files 只记明确改文件的工具,
   //   bash 写文件太杂(可能跑测试、装包),噪音大。bash 的文件改动靠 git diff 兜底。
 ];
@@ -32,6 +32,7 @@ function isEditTool(toolName) {
 // input: 工具的输入对象(归一化后)
 // P3-H13:删了 bash 重定向提取(EDIT_TOOL_PATTERNS 不含 bash,这段永不执行,死代码)。
 //   若以后 matcher 加 Bash 再加回。
+// P1-1:加 apply_patch 分支,从 patch 字符串的 +++ b/<path> 行提取路径。
 function extractFilePaths(toolName, input) {
   if (!input) return [];
   const out = [];
@@ -41,6 +42,21 @@ function extractFilePaths(toolName, input) {
   if (Array.isArray(input.edits)) {
     for (const e of input.edits) {
       if (e.file_path) out.push(String(e.file_path));
+    }
+  }
+  // P1-1:apply_patch(Codex)——文件路径编码在 patch 字符串里。
+  //   两种格式:+++ b/<path>(diff 风格)和 *** Add File: <path> / *** Delete File: <path>(Codex 风格)
+  if (/apply_patch/i.test(toolName) && typeof input.patch === 'string') {
+    // +++ b/<path>
+    const re1 = /^\+\+\+ b\/(.+)$/gm;
+    let m;
+    while ((m = re1.exec(input.patch)) !== null) {
+      out.push(m[1].trim());
+    }
+    // *** Add File: <path> / *** Delete File: <path>
+    const re2 = /^\*\*\* (?:Add|Delete|Update) File: (.+)$/gm;
+    while ((m = re2.exec(input.patch)) !== null) {
+      out.push(m[1].trim());
     }
   }
   return out;

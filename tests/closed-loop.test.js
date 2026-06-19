@@ -94,7 +94,9 @@ test('8.4 全完成 → review引导 → 起子agent → 放行+清理', () => {
   const out2 = hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' });
   assert.ok(!out2.decision, '应放行');
   assert.ok(out2.hookSpecificOutput.additionalContext.includes('已完成本轮独立 review'), '应确认 review 完成');
-  assert.strictEqual(todoExists(), false, '应已清理');
+  // P0-1:review-completed 不立即 cleanup(保留 review_total_count)。需再 Stop 一次(reviewed-exit)才清理
+  hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' });
+  assert.strictEqual(todoExists(), false, '应已清理(reviewed-exit 后)');
 });
 
 // 8.5 review 熔断:子 agent 糊弄不起 → rv_nudge++ → 熔断
@@ -120,7 +122,8 @@ test('8.6 清理:删运行时文件', () => {
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-nudge1,置 review_pending
   fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
   hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' }); // review_pending=true + summary存在 → review_subagent_fired
-  hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review 完成+清理
+  hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-completed(不 cleanup,P0-1)
+  hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // reviewed-exit → cleanup
   assert.strictEqual(todoExists(), false, 'todo.json 应删');
   assert.strictEqual(fs.existsSync(path.join(process.env.TODOPRO_DIR, 'review-subagent-prompt.md')), true, 'review-subagent-prompt 应保留');
 });

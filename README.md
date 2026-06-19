@@ -108,10 +108,19 @@ When the session finally exits (review done or circuit-broken), TodoPro deletes 
 
 ```bash
 git clone <repo-url> todopro && cd todopro
-node src/install/init.js --platform claude-code   # or: codex | hana
+node src/install/init.js
 ```
 
-Then **reload/restart** your agent platform so the hooks take effect.
+首次运行会弹出**交互式多选提示**，自动检测当前环境中的平台并预勾选，用 ↑/↓ 导航、空格切换、回车确认即可一键安装。
+
+也可用 `--platform` 静默指定（适用于 CI / 自动化）：
+
+```bash
+node src/install/init.js --platform claude-code   # 单平台
+node src/install/init.js --platform all            # 全部平台
+```
+
+安装后**重启/重载**你的 Agent 平台以使 hooks 生效。
 
 ### `init` 做了什么
 
@@ -123,12 +132,28 @@ Then **reload/restart** your agent platform so the hooks take effect.
 
 `init` is **idempotent** — running it twice won't duplicate hook entries.
 
-### 自动检测
+### 交互式选择
 
-Without `--platform`, `init` auto-detects:
-- `.claude/` present → Claude Code
-- `~/.codex/config.toml` or project `config.toml` → Codex
-- `$HANA_HOME/plugins/` (or `~/.openhanako/plugins/`) → Hana
+不带 `--platform` 参数时，`init` 弹出交互式多选提示：
+
+```
+  TodoPro init
+
+  ✓ Node v26.3.0 已安装
+
+  已检测到: Claude Code
+
+  ? 请选择要安装的平台 (↑/↓ 导航, 空格切换, 回车确认):
+    ❯ ◼ Claude Code         ✓ 已检测到
+      ◻ Codex
+      ◻ Hana
+    (↑/↓ 导航, 空格切换, 回车确认, a 全选/取消, Ctrl+C 退出)
+```
+
+- 自动检测当前环境已安装的平台并**默认勾选**
+- 未检测到的平台也可手动选择（适合跨环境部署）
+- 选多个平台会依次串行安装
+- 按 `a` 全选/取消，`Ctrl+C` 优雅退出
 
 ## 使用
 

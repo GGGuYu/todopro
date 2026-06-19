@@ -280,6 +280,7 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 - `nudge` → 任何推进发生就归零(下轮重新给 2 次机会)
 - `rv_nudge` → review 后若 agent 新增 todo(去修 review 发现的问题)则归零(给新一轮 review 机会)
 - **硬上限**:单个会话最多 3 次 review。第 4 次到期的 review 直接放行+提示"已达 review 上限"。最后一道闸,保证 review 循环有界。
+- **P0-1 修复(硬上限现在真能触发)**:review-completed 分支**不立即 cleanup**(保留 session-state.json,review_total_count 落盘)。新增 `review_done` 标志:review 完成 → 标记 review_done,放行但保留状态;下一轮 Stop 若 todos 仍全完成 + review_done → reviewed-exit(真正退出,cleanup)。若 agent 新增 todo 修 review 问题 → markTodoWritten 复位 review_done,重新走 review,review_total_count 累加。早期版本 review-completed 就 cleanup,review_total_count 被清零,硬上限形同虚设。
 
 **子 agent 糊弄兜底**:用 SubagentStop 钩子记 `subagent_fired_this_round` 标志。review 轮结束时若该标志没亮(主 agent 没真起子 agent),算一次 rv_nudge。靠熔断兜底,不靠提示词硬约束(提示词在最近位置权重高,糊弄概率本就不大,但兜底值得加)。
 
@@ -510,7 +511,10 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 3. handler 支持 action 出口(pause/abandon/acknowledge_stall)
 4. schema 同时支持 todos 和 action(不互斥 required)
 
-**改代码后必跑这四套**(`closed-loop` + `cross-platform` + `real-path` + `hana-plugin`)。加新平台或改决策逻辑,补对应测试。**真实路径测试(real-path / hana-plugin)不能省**——它们守着"模型真能调到工具"这层,closed-loop 测试绕过了这层会假绿。
+### touched-files.test.js(8 项)——extractFilePaths 单元测试
+覆盖 Write/Edit/MultiEdit 的 file_path 提取 + apply_patch 的 patch 字符串提取(P1-1:+++ b/ 和 *** Add/Delete File 两种格式)+ isEditTool 识别 + 边界(无 input)。
+
+**改代码后必跑这五套**(`closed-loop` + `cross-platform` + `real-path` + `hana-plugin` + `touched-files`)。加新平台或改决策逻辑,补对应测试。**真实路径测试(real-path / hana-plugin)不能省**——它们守着"模型真能调到工具"这层,closed-loop 测试绕过了这层会假绿。
 
 **开发纪律**(reviewer 元建议):每修一个 bug,先写能复现原 bug 的失败测试,再修到绿。本轮修 P0-H1(先写 hana-plugin.test.js 复现"工具没注册"→ 修到绿)、P1-H4(先写 R11 复现"grep 误判推进"→ 修到绿)都遵循了这个纪律。不要直接改代码再补测试——那样测试只会验证你的修复,不会复现原 bug。
 
@@ -585,13 +589,16 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 
 ```bash
 git clone <repo>
-node src/install/init.js --platform claude-code   # 或 codex / hana
+node src/install/init.js
+# ↑ 交互式选择平台(↑/↓导航,空格切换,回车确认),自动检测并预勾选
+# 也可静默指定: node src/install/init.js --platform claude-code
+# 或全量安装:  node src/install/init.js --platform all
 # 重启平台 → hooks 生效
 ```
 
 init 做的事:
 1. 检测 Node(缺失报错退出)
-2. 检测平台(或用 `--platform` 指定)
+2. 检测平台并弹出交互式选择(或用 `--platform` 静默指定)
 3. **Claude Code**:merge hooks 进 `.claude/settings.json`(保留用户已有配置,幂等去重)、放 SKILL.md 到 `.claude/skills/todopro/`、预置 `review-subagent-prompt.md` 到 `.todopro/`
 4. **Codex**:追加 `[hooks]` 段到 `config.toml`(含 TodoPro 标记,幂等)、放 SKILL.md、预置 review prompt
 5. **Hana**:装 full-access 插件到 `${HANA_HOME}/plugins/todopro/`(manifest + extensions + tools + skills + core bundle)、预置 review prompt

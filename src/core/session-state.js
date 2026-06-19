@@ -23,9 +23,10 @@ const DEFAULT_STATE = {
   subagent_fired_this_round: false,   // 本轮起了任何子 agent(仅统计用,不直接决定 review)
   review_pending: false,              // P1-2:review 引导已注入,现在起的子 agent 应是 review
   review_subagent_fired: false,       // P1-2:本轮起了 review 子 agent(由 SubagentStop 在 review_pending 时置)
+  review_done: false,                 // P0-1:本会话已 review 过(下一轮 Stop 若仍全完成→真正退出 cleanup)
   nudge_count: 0,
   review_nudge_count: 0,
-  review_total_count: 0,
+  review_total_count: 0,              // P0-1:本会话累计 review 次数(不再被 cleanup 清零,硬上限能触发)
 };
 
 function read(dir) {
@@ -57,10 +58,12 @@ function ensure(dir) {
 }
 
 // PostToolUse(TodoPro 工具)调用:置本轮推进标志,归零 nudge_count(推进了重新给机会)
+// P0-1:若 agent 新增/修改 todo(修 review 发现的问题),复位 review_done——需重新 review。
 function markTodoWritten(dir) {
   const s = ensure(dir);
   s.wrote_todo_this_round = true;
   s.nudge_count = 0;
+  s.review_done = false;  // 有新 todo 活动 → 之前的 review 不再算"已完成",需重新 review
   write(dir, s);
   return s;
 }
@@ -97,13 +100,20 @@ function markReviewPending(dir) {
   return s;
 }
 
-// review 真正完成(子 agent 跑了):累计 + 复位 review_nudge + 复位 review_pending
+// review 真正完成(子 agent 跑了):累计 + 复位 review_nudge + 复位 review_pending + 标记 review_done
+// P0-1:review_done=true 让下一轮 Stop 走 reviewed-exit(真正退出 cleanup)。
+//   review_total_count 不被清零(本函数不 cleanup),硬上限能跨多轮 review 累加触发。
+// P0-2:本函数已 write 一次,resetRoundFlags 紧接其后会再 write 一次——
+//   字段不冲突(review_done/review_total_count 由本函数设,轮标志由 resetRoundFlags 清),
+//   两次 write 是冗余但无害。若要合并,run-stop 可在 markReviewDone 后手动清轮标志再单次 write,
+//   但当前保持函数独立更清晰,接受冗余 write。
 function markReviewDone(dir) {
   const s = ensure(dir);
   s.review_total_count += 1;
   s.review_nudge_count = 0;
   s.review_pending = false;
   s.review_subagent_fired = false;
+  s.review_done = true;
   write(dir, s);
   return s;
 }

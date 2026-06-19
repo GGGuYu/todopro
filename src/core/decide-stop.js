@@ -124,7 +124,19 @@ function decide(event, dir) {
   }
 
   // 全完成:判断 review
-  // review_total 硬上限
+  // P0-1 修复:review_done 标志跟踪"本会话已 review 过"。
+  //   review-completed 不再立即 cleanup(否则 review_total_count 落不了盘,硬上限形同虚设)。
+  //   改为:review 完成 → 标记 review_done,放行但保留 session-state。
+  //   下一轮 Stop:若 todos 仍全完成 + review_done → 真正退出,cleanup。
+  //   若 agent 新增 todo 修 review 问题 → review_done 复位,重新走 review,review_total_count 累加。
+  if (st.review_done) {
+    // 已 review 过,todos 仍全完成 → 真正退出,cleanup
+    return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
+             markReviewDone: false, doCleanup: true, resetRoundFlags: true,
+             reason: 'reviewed-exit' };
+  }
+
+  // review_total 硬上限(现在能触发了,因为 review_total_count 不再被 cleanup 清零)
   if (st.review_total_count >= sessionState.REVIEW_HARD_LIMIT) {
     return { action: 'allow', injectText: prompts.reviewHardLimit(),
              bumpNudge: false, bumpReviewNudge: false, markReviewDone: false,
@@ -132,14 +144,13 @@ function decide(event, dir) {
              reason: 'review-hard-limit' };
   }
 
-  // P1-2 修复:只有"本轮起了 review 子 agent"才算 review 完成。
-  // roundSubagentFired 是"起了任何子 agent",不区分用途,不能直接当 review 完成。
-  // 用独立的 review_subagent_fired 标志(由 review 引导轮次起子 agent 时置位)。
-  // 详见 session-state.js 的 markReviewSubagentFired。
+  // P1-2 修复:只有"本轮起了 review 子 agent(requirement-summary 已写)"才算 review 完成。
   if (st.review_subagent_fired) {
+    // P0-1:review 完成但不 cleanup,保留 review_total_count 供硬上限判断。
+    //   markReviewDone 置 review_done=true,下一轮 Stop 走 reviewed-exit 分支才 cleanup。
     return { action: 'allow', injectText: prompts.reviewDoneAck(),
              bumpNudge: false, bumpReviewNudge: false, markReviewDone: true,
-             doCleanup: true, resetRoundFlags: true,
+             doCleanup: false, resetRoundFlags: true,
              reason: 'review-completed' };
   }
 
