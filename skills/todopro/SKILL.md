@@ -27,9 +27,54 @@ Do **not** use TodoPro for trivial tasks — greetings, single-line fixes, `git 
 
 The guard and review only fire **after you choose to use TodoPro**. They never fire for tasks where you used the built-in todo or no todo.
 
-## The TodoPro tool
+## How to call TodoPro
 
-TodoPro uses **full-replace semantics** — identical to the built-in `TodoWrite`. Every call sends the complete todo list; the new list overwrites the previous one. You already know how to use it.
+TodoPro is a Node script you invoke via **Bash**. It is **not** a built-in tool — you call it with the `Bash` tool, piping a JSON payload via stdin. The script lives at `src/platforms/<platform>/todopro-tool.js` (use the path for your platform; on Claude Code/Codex that's `src/platforms/claude-code/todopro-tool.js` or `src/platforms/codex/todopro-tool.js`).
+
+There are two kinds of calls — **maintain** (send the full todo list) and **exit actions** (pause/abandon/acknowledge-stall).
+
+### Maintain: send the full todo list (full-replace)
+
+Every maintain call sends the **complete** todo list; the new list overwrites the previous one (identical semantics to `TodoWrite`). Pipe the todos as JSON via stdin:
+
+```bash
+echo '{"todos":[
+  {"id":"t1","content":"Add the /export endpoint","status":"in_progress","priority":"high"},
+  {"id":"t2","content":"Wire up the CSV serializer","status":"pending","priority":"high"},
+  {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
+]}' | node src/platforms/claude-code/todopro-tool.js
+```
+
+Later, after finishing t1, send the **whole** list again (keep ids stable so the guard can diff what changed):
+
+```bash
+echo '{"todos":[
+  {"id":"t1","content":"Add the /export endpoint","status":"completed","priority":"high"},
+  {"id":"t2","content":"Wire up the CSV serializer","status":"in_progress","priority":"high"},
+  {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
+]}' | node src/platforms/claude-code/todopro-tool.js
+```
+
+The script prints a JSON result with `oldTodos`, the new `todos`, and `session`. Read it to confirm the write succeeded.
+
+### Exit actions: pause / abandon / acknowledge-stall
+
+When the guard nudges you (you stopped without advancing the todo), pick one of these by calling the script with an `action` field instead of `todos`:
+
+```bash
+# Pause the whole session (long-term; guard stops until you resume)
+echo '{"action":"pause"}' | node src/platforms/claude-code/todopro-tool.js
+
+# Abandon this requirement (direction was wrong)
+echo '{"action":"abandon"}' | node src/platforms/claude-code/todopro-tool.js
+
+# Acknowledge stall: knowingly didn't advance THIS turn; released for this turn, guard resumes next turn
+echo '{"action":"acknowledge_stall"}' | node src/platforms/claude-code/todopro-tool.js
+```
+
+All four calls (maintain + three exits) count as "advancing" and release you for the current turn. The difference: maintain keeps the session active; `pause`/`abandon` change the session status; `acknowledge_stall` just releases this turn and the guard resumes next turn.
+
+> **Tip:** if your shell quoting is tricky with the JSON, write the JSON to a temp file and pipe it: `cat /tmp/todopro.json | node src/platforms/claude-code/todopro-tool.js`.
 
 ### Status values
 
@@ -49,33 +94,33 @@ Each todo has a stable `id` (e.g. `t1`, `t2`). **Keep the id when you modify an 
 
 First call (create the list):
 
-```json
-[
-  { "id": "t1", "content": "Add the /export endpoint", "status": "in_progress", "priority": "high" },
-  { "id": "t2", "content": "Wire up the CSV serializer", "status": "pending", "priority": "high" },
-  { "id": "t3", "content": "Add tests for export", "status": "pending", "priority": "medium" }
-]
+```bash
+echo '{"todos":[
+  {"id":"t1","content":"Add the /export endpoint","status":"in_progress","priority":"high"},
+  {"id":"t2","content":"Wire up the CSV serializer","status":"pending","priority":"high"},
+  {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
+]}' | node src/platforms/claude-code/todopro-tool.js
 ```
 
 Later, after finishing t1 (send the **whole** list again, keeping ids):
 
-```json
-[
-  { "id": "t1", "content": "Add the /export endpoint", "status": "completed", "priority": "high" },
-  { "id": "t2", "content": "Wire up the CSV serializer", "status": "in_progress", "priority": "high" },
-  { "id": "t3", "content": "Add tests for export", "status": "pending", "priority": "medium" }
-]
+```bash
+echo '{"todos":[
+  {"id":"t1","content":"Add the /export endpoint","status":"completed","priority":"high"},
+  {"id":"t2","content":"Wire up the CSV serializer","status":"in_progress","priority":"high"},
+  {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
+]}' | node src/platforms/claude-code/todopro-tool.js
 ```
 
 ## What the guard does (so you're not surprised)
 
 Once you've created a TodoPro list, the guard watches two boundary points — and **only** those two. It never interrupts you mid-work.
 
-1. **When you try to stop without advancing the todo.** If you stop a turn but didn't touch the TodoPro todo this turn (no check, no add, no update) and there are still pending items, you'll get a nudge asking you to pick one of four clear exits:
-   - **Maintain** — check off what's done, or add/adjust items (advancing the todo releases you)
-   - **Pause** (`paused`) — the whole session suspends; the guard leaves you alone until you resume
-   - **Abandon** (`abandoned`) — you're withdrawing this requirement
-   - **Acknowledge stall** — you knowingly didn't advance this one turn; you're released for this turn but the guard resumes next turn (unlike pause, this is short-term)
+1. **When you try to stop without advancing the todo.** If you stop a turn but didn't call the TodoPro script this turn (no maintain, no exit action) and there are still pending items, you'll get a nudge asking you to pick one of four clear exits:
+   - **Maintain** — call the script with `{todos:[...]}` to check off what's done or add/adjust items (advancing the todo releases you)
+   - **Pause** — call with `{"action":"pause"}`; the whole session suspends; the guard leaves you alone until you resume
+   - **Abandon** — call with `{"action":"abandon"}`; you're withdrawing this requirement
+   - **Acknowledge stall** — call with `{"action":"acknowledge_stall"}`; you knowingly didn't advance this one turn; you're released for this turn but the guard resumes next turn (unlike pause, this is short-term)
 
    The point is to turn "forgot to maintain the todo" (a silent failure) into an explicit choice. You're not forced to *finish* — pause/abandon/acknowledge are all legitimate exits. You're only forced to *pick one*.
 

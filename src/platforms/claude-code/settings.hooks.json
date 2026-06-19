@@ -1,5 +1,5 @@
 {
-  "_comment": "TodoPro Claude Code hooks 配置片段。init 程序会把 hooks 字段 merge 进用户的 .claude/settings.json。此文件本身不是直接使用的 settings.json,而是 merge 源。",
+  "_comment": "TodoPro Claude Code hooks 配置片段。init 程序会把 hooks 字段 merge 进用户的 .claude/settings.json。此文件本身不是直接使用的 settings.json,而是 merge 源。PostToolUse 同时匹配 Bash(含 todopro-tool 调用,推进检测)与编辑类工具(记 touched-files);脚本内部 isTodoProCall/isEditTool 区分。",
   "hooks": {
     "Stop": [
       {
@@ -14,7 +14,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "TodoPro",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",

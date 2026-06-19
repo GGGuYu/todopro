@@ -195,7 +195,7 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 
 **推进的定义**:对 todo 的任何写操作(check/add/update/delete 都算)——即"本轮有没有发生过 TodoPro 工具调用"。任何调用都算(写操作必然经过工具)。
 
-**检测机制**:PostToolUse 钩子配 matcher 锁定 TodoPro 工具,每次被调置 `wrote_todo_this_round=true`;Stop 时读标志,放行后复位。零 LLM、纯事实判断。
+**检测机制**:PostToolUse 钩子 matcher 锁定 `Bash`(Claude Code)/ `shell`(Codex),`run-post-tool-use.js` 的 `isTodoProCall` 从命令内容识别 `todopro-tool.js`(Hana 上则识别工具名 `TodoPro`)。匹配则置 `wrote_todo_this_round=true`;Stop 时读标志,放行后复位。零 LLM、纯事实判断。(详见决策 13——为什么不是 matcher:"TodoPro")
 
 **四选一**(合法出口):
 - **维护**:check 掉做完的 / add 新增(推进了,放行)
@@ -353,6 +353,36 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 
 **注意**:Claude Code 有内置 TodoWrite,最小闭环天然带着"模型可能用内置不用我们的"这个覆盖率问题——靠 SKILL.md description 缓解,不靠拦。
 
+### 决策 13:工具可达性 = Bash 调脚本(非注册工具),出口用 action 字段
+
+> ⚠️ 这是踩坑后的修复。早期实现假设存在一个名为 "TodoPro" 的注册工具,但 Claude Code/Codex 的工具来源只有内置工具 + MCP server,我们从没注册。导致整套机制在主目标平台上从未激活过。详见 tests/real-path.test.js 的来由。
+
+**选择**:Claude Code/Codex 上,TodoPro **不是注册工具**,而是一个 Node 脚本(`todopro-tool.js`),模型用 **Bash 工具**调用它(`echo '<json>' | node todopro-tool.js`)。Hana 上才是真注册工具(`pi.registerTool`)。
+
+**为什么不用 MCP**:
+- MCP server 要实现 stdio 协议握手,违背"零依赖纯 Node"。
+- 用户要额外配 MCP server,init 更重。
+- Codex 的 MCP 支持成熟度待查。
+- Bash 调脚本零依赖、init 轻,脚本已有。
+
+**推进检测随之改变**:PostToolUse 的 matcher 从 `"TodoPro"` 改成 `"Bash"`(Codex 是 `shell`)。`run-post-tool-use.js` 的 `isTodoProCall` 从 Bash 命令内容里识别 `todopro-tool.js`(正则匹配脚本路径),区分"调 TodoPro"和"普通 bash"。普通 bash(如 npm test)不算推进。
+
+**出口接口扩展**(同时修复的第二个断层):早期 `runTool` 只接受 `todos` 数组,模型没法表达 pause/abandon/acknowledge_stall。现在输入格式两种:
+- 维护:`{"todos":[...]}`(全量替换)
+- 三个出口:`{"action":"pause"}` / `{"action":"abandon"}` / `{"action":"acknowledge_stall"}`
+
+`action` 映射:pause→session.status=paused,abandon→abandoned,acknowledge_stall→不改 session.status(只置推进标志放行本轮)。四个出口都置 `wrote_todo_this_round`(都算推进)。
+
+**提示词占位替换**:prompts.js 里的提示词用 `<todopro-tool>` 占位(不写死平台路径,保持核心平台无关)。适配层调 `runStop(dir, toolPath)` 时传入实际脚本路径,`run-stop.js` 把占位替换成真实路径,模型拿到可用的命令。
+
+**红线**:
+- **不要**在 Claude Code/Codex 上假设有 "TodoPro" 注册工具。模型靠 Bash 调脚本。
+- **不要**把 PostToolUse matcher 改回 `"TodoPro"`——那永远不触发。必须是 `Bash`/`shell`,靠命令内容识别。
+- `isTodoProCall` 的正则 `/todopro-tool\.js/` 是识别关键,改脚本名要同步改正则。
+- Hana 是例外:它用 `pi.registerTool` 注册了真工具,`isTodoProCall` 也识别工具名 `TodoPro`。两条路径共存。
+
+**测试教训**:tests/closed-loop.test.js 早期直接 `echo JSON | node todopro-tool.js` 调脚本,**绕过了"模型怎么调到工具"这层**,所以全绿但实际跑不通。tests/real-path.test.js 修复了这个断层:模拟模型用 Bash 工具调用(真实执行 + 触发 PostToolUse(Bash) 让钩子识别)。**加新功能时,测试必须走真实路径,不能绕过工具可达层。**
+
 ---
 
 ## 五、平台钩子对照(改适配层时参考)
@@ -460,13 +490,23 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 7. 优雅退化:用内置 todo 不触发任何机制
 
 ### cross-platform.test.js(5 项)
-1. 核心脚本无平台分支(不引用 platforms/)
+1. 核心脚本无平台分支(不 require platforms/)
 2. 三平台适配层都 require 同一份 core
 3. 同一状态下 Claude Code 与 Codex 决策一致(都阻断)
 4. 两平台推进后均放行
 5. 所有 .js 仅 require Node 内置或内部模块(零 npm 依赖)
 
-**改代码后必跑这两套**。加新平台或改决策逻辑,补对应测试。
+### real-path.test.js(8 项)——真实路径,不绕过工具可达层
+1. 模型经 Bash 调 todopro-tool 建 todo → Stop 放行(推进标志被识别)
+2. 本轮没调 TodoPro 脚本 → Stop 阻断+四选一(提示词含 Bash 调用说明)
+3. 被 nudge 后模型经 Bash 调 acknowledge_stall → 放行(session 仍 active)
+4. 模型经 Bash 调 pause → session.paused → Stop 放行不监护
+5. 模型经 Bash 调 abandon → session.abandoned → Stop 放行+清理
+6. 普通 Bash 命令(非 todopro-tool)不置推进标志 → Stop 仍判定没推进
+7. 全完成经 Bash → review 引导 → 子 agent → 放行+清理
+8. 模型用内置 TodoWrite 不调我们的脚本 → 无 .todopro → Stop 纯放行
+
+**改代码后必跑这三套**(`closed-loop` + `cross-platform` + `real-path`)。加新平台或改决策逻辑,补对应测试。**真实路径测试(real-path)不能省**——它守着"模型真能调到工具"这层,closed-loop 测试绕过了这层会假绿。
 
 ---
 
@@ -497,6 +537,9 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 | 想做 | 能不能 | 为什么 |
 |---|---|---|
 | 拦内置 TodoWrite 提高覆盖率 | ❌ | 侵入性大,违背自主原则,用户不信任。靠 SKILL.md 吸引 |
+| 假设 Claude Code/Codex 有 "TodoPro" 注册工具 | ❌ | 没有。模型靠 Bash 调脚本(决策 13)。matcher 必须是 Bash/shell |
+| 把 PostToolUse matcher 改回 "TodoPro" | ❌ | 永远不触发。必须是 Bash/shell + 命令内容识别 |
+| 测试绕过"模型怎么调到工具"这层 | ❌ | 必须走真实路径(tests/real-path.test.js)。直接调脚本会假绿 |
 | 在 PostToolUse 对每个编辑注入建议 | ❌ | 违反原则 2(中间零干预)。只在边界点动手 |
 | 让 review 的 CRITICAL 必须修 | ❌ | 违反原则 4。全部先查实均可忽略,否则放大消耗 |
 | 加阻断分支但不配熔断 | ❌ | 违反原则 5。会卡死用户 |

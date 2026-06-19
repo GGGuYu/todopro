@@ -9,17 +9,20 @@
 // 注入量控制在 ~1-2K,在用户可接受范围。
 
 // ─── 循环出口兜底:四选一 nudge ───
+// 注意:提示词里不写死平台路径(claude-code/codex),用 <todopro-tool> 占位,
+// 由适配层在注入时替换为实际脚本路径。这样核心提示词平台无关。
 function nudgeFourWay(attempt) {
   return [
-    '【TodoPro 监护】检测到本轮你没有推进 todo(未对 TodoPro todo 做任何写操作),但仍有未完成项。',
+    '【TodoPro 监护】检测到本轮你没有推进 todo(未调用 TodoPro 脚本),但仍有未完成项。',
     '',
-    '请从以下四个合法出口中选择一个,明确你的意图(不能什么都没选就退出):',
+    '请从以下四个合法出口中选择一个,明确你的意图(不能什么都没选就退出)。每个出口都是用 Bash/shell 调用 TodoPro 脚本:',
     '',
-    '1. **维护**:用 TodoPro 工具 check 掉做完的项,或 add 新增项、update 调整。推进了即放行。',
-    '2. **暂停**(pause):用 TodoPro 把 session.status 设为 `paused`——整个会话挂起,停止监护(通常用于等用户/外部条件)。',
-    '3. **放弃**(abandon):用 TodoPro 把 session.status 设为 `abandoned`——方向错了,显式撤销本次需求。',
-    '4. **知情停顿**(acknowledge_stall):本轮 knowingly 不推进。用 TodoPro 把 session.status 设为 `acknowledge_stall`——放行本轮,下轮继续监护(区别于 pause 的长期挂起)。',
+    '1. **维护**:调用 `node <todopro-tool>`,传入 `{"todos":[...]}` 全量替换列表(check 掉做完的、add 新增、update 调整)。推进了即放行。',
+    '2. **暂停**(pause):`echo \'{"action":"pause"}\' | node <todopro-tool>` —— 整个会话挂起,停止监护(通常用于等用户/外部条件)。',
+    '3. **放弃**(abandon):`echo \'{"action":"abandon"}\' | node <todopro-tool>` —— 方向错了,显式撤销本次需求。',
+    '4. **知情停顿**(acknowledge_stall):`echo \'{"action":"acknowledge_stall"}\' | node <todopro-tool>` —— 本轮 knowingly 不推进,放行本轮,下轮继续监护(区别于 pause 的长期挂起)。',
     '',
+    '(<todopro-tool> 是 TodoPro 脚本路径:Claude Code 用 src/platforms/claude-code/todopro-tool.js,Codex 用 src/platforms/codex/todopro-tool.js。详见 SKILL.md。)',
     `(本次提醒第 ${attempt} 次,共 ${2} 次。超过将交还用户。)`,
   ].join('\n');
 }

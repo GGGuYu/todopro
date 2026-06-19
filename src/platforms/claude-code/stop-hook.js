@@ -5,12 +5,16 @@
 // 仅用 Node 内置模块(零依赖)。
 
 const { readStdin, stopOutput, emit } = require('./util');
+const path = require('path');
 const { runStop } = require('../../core/run-stop');
+
+// 本平台 todopro-tool.js 路径(用于替换提示词占位,给模型可用命令)
+const TODO_TOOL = path.join(__dirname, 'todopro-tool.js');
 
 function main() {
   const payload = readStdin();
   const dir = payload.cwd || process.cwd();
-  const decision = runStop(dir);
+  const decision = runStop(dir, TODO_TOOL);
   emit(stopOutput({
     block: decision.action === 'block',
     injectText: decision.injectText,

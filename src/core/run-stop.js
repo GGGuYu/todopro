@@ -11,8 +11,10 @@ const sessionState = require('./session-state');
 const decideStop = require('./decide-stop');
 const cleanup = require('./cleanup');
 
-// runStop(dir):读状态 → 归一化事件 → decide-stop → 执行副作用 → 返回 decision
-function runStop(dir) {
+// runStop(dir, toolPath?):读状态 → 归一化事件 → decide-stop → 执行副作用 → 返回 decision
+// toolPath:可选,本平台 todopro-tool.js 的实际路径,用于替换提示词里的 <todopro-tool> 占位。
+//           适配层传入,使提示词给模型可用的命令(不写死平台路径)。
+function runStop(dir, toolPath) {
   const data = todoStore.read(dir);
   if (!data) {
     return { action: 'allow', injectText: null, reason: 'no-active-session', _noop: true };
@@ -38,6 +40,11 @@ function runStop(dir) {
   };
 
   const decision = decideStop.decide(event, dir);
+
+  // 替换提示词里的 <todopro-tool> 占位为实际脚本路径
+  if (decision.injectText && toolPath) {
+    decision.injectText = decision.injectText.replace(/<todopro-tool>/g, toolPath);
+  }
 
   // 执行副作用(顺序:先 reset flags 再 cleanup,避免 cleanup 后又写回)
   if (decision.bumpNudge) sessionState.bumpNudge(dir);

@@ -1,0 +1,167 @@
+// tests/real-path.test.js
+// 真实路径验证:模拟模型经 Bash 工具调用 TodoPro 脚本(不绕过"模型怎么调到工具"这层)。
+//
+// 这套测试针对 review 指出的 P0 问题:Claude Code/Codex 上 TodoPro 不是注册工具,
+// 模型靠 Bash 调脚本。验证整条链路:
+//   模型用 Bash 工具跑 `node todopro-tool.js '<json>'`
+//   → Claude Code 触发 PostToolUse(Bash matcher)
+//   → post-tool-use.js 从 command 识别出 todopro-tool → 置推进标志
+//   → Stop 钩子读到推进标志 → 放行
+//
+// 关键:测试不直接调 todopro-tool.js,而是模拟"模型用 Bash 工具"——
+// 先真实执行 bash 命令(让脚本写盘),再发 PostToolUse(Bash) 事件让钩子识别。
+// 运行:node tests/real-path.test.js
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+let PASS = 0, FAIL = 0;
+function test(name, fn) {
+  try { fn(); console.log('  ✓ ' + name); PASS++; }
+  catch (e) { console.log('  ✗ ' + name + '\n    ' + e.message); FAIL++; }
+}
+
+// 模拟模型用 Bash 工具调用 TodoPro 脚本(真实执行 + 触发 PostToolUse)。
+// payload 是要传给脚本的 JSON。返回脚本 stdout。
+function modelCallsTodoProViaBash(dir, payload) {
+  const script = path.join(ROOT, 'src/platforms/claude-code/todopro-tool.js');
+  const payloadJson = JSON.stringify(payload);
+  // 1. 真实执行 bash 命令(模型会这么做)
+  const cmd = `echo '${payloadJson.replace(/'/g, "'\\''")}' | node "${script}"`;
+  const stdout = execSync(cmd, { encoding: 'utf8', env: process.env });
+  // 2. 模拟 Claude Code 触发 PostToolUse(Bash matcher),command 就是上面那条
+  const ptuPayload = {
+    cwd: dir,
+    hook_event_name: 'PostToolUse',
+    tool_name: 'Bash',
+    tool_input: { command: cmd },
+  };
+  execSync(`echo '${JSON.stringify(ptuPayload).replace(/'/g, "'\\''")}' | node "${path.join(ROOT, 'src/platforms/claude-code/post-tool-use.js')}"`, { env: process.env, stdio: ['pipe', 'ignore', 'ignore'] });
+  return stdout;
+}
+
+function stopHook(dir) {
+  const cmd = `echo '{"cwd":"${dir}","hook_event_name":"Stop"}' | node "${path.join(ROOT, 'src/platforms/claude-code/stop-hook.js')}"`;
+  try {
+    return execSync(cmd, { encoding: 'utf8', env: process.env }).trim();
+  } catch (e) { return e.stdout || ''; }
+}
+function subagentStop(dir) {
+  const cmd = `echo '{"cwd":"${dir}","hook_event_name":"SubagentStop"}' | node "${path.join(ROOT, 'src/platforms/claude-code/subagent-stop.js')}"`;
+  execSync(cmd, { env: process.env, stdio: ['pipe', 'ignore', 'ignore'] });
+}
+function resetRound() {
+  execSync(`node -e "require('${ROOT.replace(/'/g, "'\\''")}/src/core/session-state').resetRoundFlags()"`, { env: process.env });
+}
+function fresh(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  process.env.TODOPRO_DIR = path.join(dir, '.todopro');
+}
+function sessionStatus() {
+  try { return JSON.parse(fs.readFileSync(path.join(process.env.TODOPRO_DIR, 'todo.json'), 'utf8')).session.status; }
+  catch (e) { return null; }
+}
+
+const DIR = '/tmp/tp-realpath';
+console.log('真实路径验证(模型经 Bash 调用,不绕过)\n');
+
+// R1:模型经 Bash 建 todo → PostToolUse 识别 → 推进标志置位 → Stop 放行
+test('R1 模型经 Bash 调 todopro-tool 建 todo → Stop 放行(推进标志被识别)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  const out = stopHook(DIR);
+  // 推进了 → 放行(无 block)
+  assert.ok(!out.includes('"decision":"block"'), '推进了应放行,但被阻断。output: ' + out);
+});
+
+// R2:本轮没调 TodoPro(只干了别的)→ Stop 阻断四选一
+test('R2 本轮没调 TodoPro 脚本 → Stop 阻断+四选一(提示词含 Bash 调用说明)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  resetRound(); // 新一轮,本轮还没调 TodoPro
+  const out = stopHook(DIR);
+  assert.ok(out.includes('"decision":"block"'), '没推进应阻断');
+  assert.ok(out.includes('todopro-tool.js'), '四选一提示应教 Bash 调用脚本');
+  assert.ok(out.includes('pause'), '提示应含 pause 出口');
+  assert.ok(out.includes('acknowledge_stall'), '提示应含 acknowledge_stall 出口');
+});
+
+// R3:被 nudge 后,模型用 Bash 调 acknowledge_stall → 推进 → 放行
+test('R3 被nudge后模型经 Bash 调 acknowledge_stall → 放行(session仍 active)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  resetRound();
+  stopHook(DIR); // nudge1
+  // 模型选择 acknowledge_stall
+  modelCallsTodoProViaBash(DIR, { action: 'acknowledge_stall' });
+  const out = stopHook(DIR);
+  assert.ok(!out.includes('"decision":"block"'), 'acknowledge_stall 后应放行');
+  assert.strictEqual(sessionStatus(), 'active', 'acknowledge_stall 不应改 session.status');
+});
+
+// R4:模型用 Bash 调 pause → session.status=paused → Stop 放行(不再监护)
+test('R4 模型经 Bash 调 pause → session.paused → Stop 放行不监护', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  modelCallsTodoProViaBash(DIR, { action: 'pause' });
+  assert.strictEqual(sessionStatus(), 'paused', 'pause 后 session 应 paused');
+  resetRound();
+  const out = stopHook(DIR);
+  assert.ok(!out.includes('"decision":"block"'), 'paused 应放行不监护');
+});
+
+// R5:模型用 Bash 调 abandon → session.abandoned → Stop 放行+清理
+test('R5 模型经 Bash 调 abandon → session.abandoned → Stop 放行+清理', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  modelCallsTodoProViaBash(DIR, { action: 'abandon' });
+  assert.strictEqual(sessionStatus(), 'abandoned');
+  const out = stopHook(DIR);
+  assert.ok(!out.includes('"decision":"block"'), 'abandoned 应放行');
+  assert.ok(!fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json')), 'abandoned 应清理 todo.json');
+});
+
+// R6:普通 Bash 命令(不是调 todopro-tool)不应置推进标志
+test('R6 普通 Bash 命令(非 todopro-tool)不置推进标志 → Stop 仍判定没推进', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  resetRound();
+  // 模拟模型跑了个普通 bash 命令(如 npm test)
+  const ptuPayload = {
+    cwd: DIR, hook_event_name: 'PostToolUse', tool_name: 'Bash',
+    tool_input: { command: 'npm test' },
+  };
+  execSync(`echo '${JSON.stringify(ptuPayload).replace(/'/g, "'\\''")}' | node "${path.join(ROOT, 'src/platforms/claude-code/post-tool-use.js')}"`, { env: process.env, stdio: ['pipe', 'ignore', 'ignore'] });
+  const out = stopHook(DIR);
+  assert.ok(out.includes('"decision":"block"'), '普通 bash 不算推进,应阻断');
+});
+
+// R7:全完成 → review 引导 → 模型起子 agent → 放行+清理(全经 Bash)
+test('R7 全完成经 Bash → review引导 → 子agent → 放行+清理', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'completed' }] });
+  resetRound();
+  const out1 = stopHook(DIR);
+  assert.ok(out1.includes('"decision":"block"'), '应阻断引导 review');
+  assert.ok(out1.includes('独立 review'), '应含 review 引导');
+  subagentStop(DIR);
+  const out2 = stopHook(DIR);
+  assert.ok(!out2.includes('"decision":"block"'), '子agent后应放行');
+  assert.ok(!fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json')), '应清理');
+});
+
+// R8:优雅退化——模型用内置 TodoWrite(不经我们的脚本)→ 机制完全不触发
+test('R8 模型用内置 TodoWrite 不调我们的脚本 → 无 .todopro → Stop 纯放行', () => {
+  fresh(DIR);
+  // 模拟模型用了内置 TodoWrite(完全不碰我们的脚本)
+  const out = stopHook(DIR);
+  assert.strictEqual(out.trim(), '', '无 .todopro 应纯放行无输出');
+  assert.ok(!fs.existsSync(process.env.TODOPRO_DIR), '不应创建 .todopro');
+});
+
+console.log('\n结果:' + PASS + ' 通过, ' + FAIL + ' 失败');
+process.exit(FAIL === 0 ? 0 : 1);

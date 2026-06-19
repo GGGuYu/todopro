@@ -14,10 +14,13 @@ const todoStore = require('./todo-store');
 
 // 判断哪些工具算"编辑类"。平台适配层把工具名归一化后传这里。
 // 编辑类:写/改/删文件的操作。读操作不记。
+// 含 Codex 的 apply_patch(Codex 的文件编辑工具)。
 const EDIT_TOOL_PATTERNS = [
-  /^write$/i, /^edit$/i, /^multi_edit$/i,
-  /^bash$/i,            // bash 可能写文件(由调用方传 file_path 提取)
+  /^write$/i, /^edit$/i, /^multi_edit$/i, /^notebookedit$/i,
+  /^apply_patch$/i,       // Codex 的文件编辑工具
   /^create$/i, /^save$/i,
+  // 不含 bash/shell:touched-files 只记明确改文件的工具,
+  //   bash 写文件太杂(可能跑测试、装包),噪音大。bash 的文件改动靠 git diff 兜底。
 ];
 
 function isEditTool(toolName) {

@@ -36,6 +36,11 @@ const sessionState = require(resolveCore('session-state'));
 const { runStop } = require(resolveCore('run-stop'));
 const { runPostToolUse } = require(resolveCore('run-post-tool-use'));
 
+// Hana 上 TodoPro 工具入口路径(用于替换提示词占位)
+// Hana 是插件内 registerTool 的真工具,不是脚本;但提示词占位仍需一个可调用入口。
+// Hana 上模型直接调 TodoPro 工具(非 Bash),占位替换为工具名提示。
+const TODO_TOOL_HINT = 'TodoPro 工具(直接调用,参数 {todos:[...]} 或 {action:"..."}）';
+
 // ExtensionFactory:Pi 加载插件时调用,参数为 ExtensionAPI
 module.exports = function (pi) {
   const cwd = pi.cwd || process.cwd();
@@ -43,7 +48,7 @@ module.exports = function (pi) {
   // ─── turn_end ↔ Stop ───
   pi.on('turn_end', (event, context) => {
     try {
-      const decision = runStop(cwd);
+      const decision = runStop(cwd, TODO_TOOL_HINT);
       // 阻断+续跑:发一条 user message 触发新 turn(等价 block+additionalContext)
       if (decision.action === 'block' && decision.injectText) {
         pi.sendUserMessage(decision.injectText, { deliverAs: 'followUp' });
