@@ -1,0 +1,24 @@
+# --- TodoPro 运行时文件(每次会话生成/清理,不入库) ---
+.todopro/todo.json
+.todopro/todo.md
+.todopro/requirement-summary.md
+.todopro/touched-files.json
+.todopro/session-state.json
+
+# 注意:.todopro/review-subagent-prompt.md 是预置静态文件,需入库(见 skills/ 下源文件,init 时拷贝)
+
+# --- macOS ---
+.DS_Store
+._*
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- 编辑器 ---
+.vscode/
+.idea/
+*.swp
+*.swo
