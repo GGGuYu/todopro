@@ -107,28 +107,30 @@ When the session finally exits (review done or circuit-broken), TodoPro deletes 
 ### 一行安装
 
 ```bash
-git clone https://github.com/GGGuYu/todopro.git todopro && cd todopro
-node src/install/init.js
+git clone https://github.com/GGGuYu/todopro.git && cd todopro
+node src/install/init.js --platform all     # 首次:全局安装 + 配置所有平台
+echo 'export PATH="$HOME/.agents/skills/todopro/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+装完后，可在**任意项目目录**使用 `todopro` 命令（类似 `openspec init`）：
+
+```bash
+todopro init                          # 交互式选择平台
+todopro init --platform claude-code   # 只装 Claude Code
+todopro --update                      # 刷新全局安装
+todopro --uninstall                   # 交互式卸载
 ```
 
 安装分两步:
-1. **全局安装**:把脚本和 SKILL 复制到 `~/.agents/skills/todopro/`(自包含,所有项目共享)
-2. **平台配置**:为选中的工具配置 hook(指向全局路径)+ 放 SKILL.md + 预置 review-prompt
-
-首次运行会弹出**交互式多选提示**,自动检测当前环境中的平台并预勾选,用 ↑/↓ 导航、空格切换、回车确认即可一键安装。
-
-也可用 `--platform` 静默指定(适用于 CI / 自动化):
-
-```bash
-node src/install/init.js --platform claude-code   # 单平台
-node src/install/init.js --platform all            # 全部平台
-```
+1. **全局安装**:把 `src/` + `bin/` + SKILL.md 复制到 `~/.agents/skills/todopro/`
+2. **平台配置**:为当前项目配置 hook(指向全局路径) + 放 SKILL.md + 预置 review-prompt
 
 ### 卸载
 
 ```bash
-node src/install/init.js --uninstall                      # 交互式选择卸载平台
-node src/install/init.js --uninstall --platform claude-code # 精确删除指定平台
+todopro --uninstall                           # 交互式选择卸载平台
+todopro --uninstall --platform claude-code    # 精确删除指定平台
 ```
 
 卸载会精确清楚:全局安装目录、各平台的 hook 配置条目(保留用户其他配置)、SKILL.md、预置文件。重启平台后完全恢复裸跑状态。
@@ -139,19 +141,35 @@ node src/install/init.js --uninstall --platform claude-code # 精确删除指定
 
 ```bash
 cd todopro && git pull
-node src/install/init.js --update    # 只刷新全局安装(不重配 hook)
+todopro --update    # 只刷新全局安装(不重配 hook)
 ```
 
 ### `init` 做了什么
 
 | 平台 | 动作 |
 |---|---|
-| **全局** | 复制 `src/` + `skills/` 到 `~/.agents/skills/todopro/`(自包含) |
-| **Claude Code** | Merges hooks into `.claude/settings.json` (command 指向全局, preserves existing config, idempotent), places `SKILL.md` at `.claude/skills/todopro/`, pre-writes `review-subagent-prompt.md` to `.todopro/` |
-| **Codex** | Appends a `[hooks]` block to `config.toml` (command 指向全局, idempotent), places `SKILL.md`, pre-writes the review prompt |
-| **Hana** | Installs a full-access plugin to `${HANA_HOME}/plugins/todopro/` (manifest + extensions/tools/core **软链到全局**, skills + pre-writes review prompt). Requires enabling "允许全权插件" in Hana settings |
+| **全局** | 复制 `src/` + `bin/` + SKILL.md 到 `~/.agents/skills/todopro/` |
+| **Claude Code** | Merges hooks into 项目 `.claude/settings.json` (command 指向全局), places `SKILL.md` at 项目 `.claude/skills/todopro/`, pre-writes `review-subagent-prompt.md` to 项目 `.todopro/` |
+| **Codex** | Appends a `[hooks]` block to `~/.codex/config.toml` (command 指向全局), places `SKILL.md`, pre-writes the review prompt |
+| **Hana** | Installs a full-access plugin to `${HANA_HOME}/plugins/todopro/` (软链到全局). Requires enabling "允许全权插件" in Hana settings |
 
 `init` is **idempotent** — running it twice won't duplicate hook entries.
+
+### 项目目录结构
+
+```
+项目根/
+├── .todopro/
+│   ├── claude-code/              ← Claude Code 运行时文件(平台隔离)
+│   │   ├── todo.json
+│   │   ├── session-state.json
+│   │   └── touched-files.json
+│   ├── review-subagent-prompt.md ← 共享只读
+│   └── README.md
+├── .claude/
+│   ├── settings.json             ← hooks 配置(merge 进去的)
+│   └── skills/todopro/SKILL.md   ← 项目级 skill(只在 init 过的项目可见)
+```
 
 ### 交互式选择
 

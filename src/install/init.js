@@ -551,6 +551,14 @@ function multiSelectPrompt(options, action = '安装') {
       }
 
       process.stdout.write(out);
+      // 清除上次渲染残留(警告出现又消失时,旧行数 > 新行数)
+      if (renderCount > 0 && lastRows > rows) {
+        const residual = lastRows - rows;
+        for (let i = 0; i < residual; i++) {
+          process.stdout.write(ANSI.clearLine + '\n');
+        }
+        process.stdout.write(ANSI.cursorUp(residual));
+      }
       lastRows = rows;
       renderCount++;
     }

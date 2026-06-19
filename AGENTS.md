@@ -392,6 +392,22 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 
 **另一个踩坑(已修)**:Hana 的 `resolveCore` 早期写 `path.join(__dirname, '..', '..', 'core', name)`,从 `extensions/` 出发 `..`×2 到了 `plugins/`(差一层),实际 core bundle 在 `plugins/todopro/core/`。部署后 `require` 找不到模块,插件加载即崩。正确是 `..`×1(`extensions/` → `plugins/todopro/`)+ `core`。`tools/todopro.js` 同样 bug 同样修。tests/cross-platform.test.js 12.4 守这条(部署后实测 resolveCore 路径)。**改 Hana 路径相关代码,必跑 12.4。**
 
+### 决策 14:平台状态隔离 = .todopro/<platform>/ 子目录
+
+**选择**:各平台的运行时文件分目录存储(`.todopro/claude-code/`、`.todopro/codex/`、`.todopro/hana/`),`review-subagent-prompt.md` 和 `README.md` 仍共享在 `.todopro/` 根。
+
+**为什么**:同一个项目里可能装多种平台。如果不隔离,nudge 计数、review 计数、todo 列表全混在一起,一个平台的副效应污染另一个。`paths.js` 的 `setPlatform('claude-code')` 在适配器启动时调用,核心逻辑(decide-stop/session-state/todo-store)零改动。
+
+**实现**:`paths.js` 导出 `setPlatform(platform)`,模块级变量 `_platform`。`paths(dir)` 返回 `root = _platform ? path.join(base, _platform) : base`。也支持 `TODOPRO_PLATFORM` 环境变量(测试/内联脚本用)。平台子目录由核心模块惰性创建(`fs.mkdirSync(root, {recursive:true})`),init 不显式创建——首次活跃会话前 `.todopro/` 下只有共享文件。
+
+### 决策 15:项目级安装模型(类似 OpenSpec)
+
+**选择**:全局只放 CLI 入口 + src/ 运行时,SKILL.md 由 `todopro init` 按项目注入 `.claude/skills/todopro/SKILL.md`(项目级)。不创建 `~/.claude/skills/todopro` 用户级软链。
+
+**为什么**:用户级软链会让没 init 的项目也看到 TodoPro skill,但 hooks 缺失 → 模型可能调用但没有自动守卫 → 体验断裂。项目级安装保证"有 skill 必有 hook"。
+
+**CLI**:`bin/todopro` Node 脚本转发参数到全局 init.js。加到 PATH 后可在任意目录 `todopro init`。
+
 ---
 
 ## 五、平台钩子对照(改适配层时参考)
@@ -595,20 +611,28 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 
 ```bash
 git clone https://github.com/GGGuYu/todopro.git
-node src/install/init.js
-# ↑ 交互式选择平台(↑/↓导航,空格切换,回车确认),自动检测并预勾选
-# 也可静默指定: node src/install/init.js --platform claude-code
-# 或全量安装:  node src/install/init.js --platform all
-# 重启平台 → hooks 生效
+cd todopro
+node src/install/init.js --platform all   # 首次:全局安装 + 各平台 hook 配置
+# 把 CLI 加到 PATH(一次性):
+echo 'export PATH="$HOME/.agents/skills/todopro/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+之后在任何项目中:
+```bash
+todopro init                          # 交互式选择平台(↑/↓导航,空格切换,回车确认)
+todopro init --platform claude-code   # 静默安装指定平台
+todopro --update                      # 刷新全局安装
+todopro --uninstall                   # 交互式卸载
 ```
 
 init 做的事:
 1. 检测 Node(缺失报错退出)
-2. **全局安装**:复制 `src/` + `skills/` 到 `~/.agents/skills/todopro/`(自包含,所有项目共享)
+2. **全局安装**:复制 `src/` + `bin/` + SKILL.md 到 `~/.agents/skills/todopro/`
 3. 检测平台并弹出交互式选择(或用 `--platform` 静默指定)
-4. **Claude Code**:merge hooks 进 `.claude/settings.json`(**command 用全局绝对路径**,不依赖仓库在项目内;保留用户已有配置,幂等去重)、复制 SKILL.md 到 `.claude/skills/todopro/`、预置 `review-subagent-prompt.md` + README 到 `.todopro/`
-5. **Codex**:追加 `[hooks]` 段到 `config.toml`(command 用全局绝对路径,幂等)、复制 SKILL.md、预置 review prompt
-6. **Hana**:装 full-access 插件到 `${HANA_HOME}/plugins/todopro/`(manifest 复制;extensions/tools/core **软链到全局**,回退复制;skills 复制)、预置 review prompt
+4. **Claude Code**:merge hooks 进项目 `.claude/settings.json`(command 用全局绝对路径)、复制 SKILL.md 到项目 `.claude/skills/todopro/`、预置 `review-subagent-prompt.md` + README 到 `.todopro/`
+5. **Codex**:追加 `[hooks]` 段到 `~/.codex/config.toml`、复制 SKILL.md、预置 review prompt
+6. **Hana**:装 full-access 插件到 `${HANA_HOME}/plugins/todopro/`(软链到全局)
 7. 提示重载
 
 **`--update`**:`init --update` 只刷新全局安装(从仓库覆盖 `~/.agents/skills/todopro/`),不重配 hook。开发态更新代码后用。
