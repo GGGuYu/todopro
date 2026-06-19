@@ -142,9 +142,6 @@ function installGlobal(root) {
   fs.copyFileSync(path.join(root, 'src/install/init.js'), path.join(GLOBAL_DIR, 'src/install/init.js'));
   // 复制 skills/todopro/
   copyDir(path.join(root, 'skills/todopro'), path.join(GLOBAL_DIR, 'skills/todopro'));
-  // 复制 src/install/init.js 自身,删仓库后仍可 --update/--uninstall
-  fs.mkdirSync(path.join(GLOBAL_DIR, 'src/install'), { recursive: true });
-  fs.copyFileSync(path.join(root, 'src/install/init.js'), path.join(GLOBAL_DIR, 'src/install/init.js'));
 
   ok('全局安装完成(src/ + skills/ 已复制到 ' + GLOBAL_DIR + ')');
   return GLOBAL_DIR;
