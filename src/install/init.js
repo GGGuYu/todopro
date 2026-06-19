@@ -136,29 +136,38 @@ function installCodex(dir) {
     ? path.join(dir, 'config.toml')
     : path.join(codexDir, 'config.toml');
 
-  // Codex hooks 配置(TOML 段)。组9 实现 codex 适配层后此处指向真实脚本。
+  // Codex hooks 配置(TOML 段)。
+  // P2-5 修复:路径用 TOML 字面字符串(单引号)包裹,单引号内不转义,含空格/反斜杠都安全。
+  // 去重查 "todopro/stop-hook.js" 标志字符串(比查注释更可靠,用户改注释不影响)。
+  function tomlLitStr(s) {
+    // TOML 字面字符串:单引号包裹,内部单引号不允许(字面串不能含单引号)。
+    // 路径不应含单引号;若含则回退到基本字符串(双引号)并转义。
+    if (s.indexOf("'") === -1) return "'" + s + "'";
+    return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+  function codexHookEntry(hookType, scriptName, matcher) {
+    const scriptPath = path.join(root, 'src/platforms/codex', scriptName);
+    const lines = ['[[hooks.' + hookType + ']]'];
+    if (matcher) lines.push('matcher = ' + tomlLitStr(matcher));
+    lines.push('command = ["node", ' + tomlLitStr(scriptPath) + ']');
+    return lines.join('\n');
+  }
   const codexHooksToml = [
     '',
     '# --- TodoPro hooks (added by todopro init) ---',
-    '[[hooks.stop]]',
-    'command = ["node", "' + path.join(root, 'src/platforms/codex/stop-hook.js').replace(/\\/g, '\\\\') + '"]',
+    codexHookEntry('stop', 'stop-hook.js'),
     '# PostToolUse 匹配 shell(含 todopro-tool 调用,推进检测)+ 编辑类工具(记 touched-files)',
-    '[[hooks.post_tool_use]]',
-    'matcher = "shell"',
-    'command = ["node", "' + path.join(root, 'src/platforms/codex/post-tool-use.js').replace(/\\/g, '\\\\') + '"]',
-    '[[hooks.post_tool_use]]',
-    'matcher = "apply_patch|write|edit"',
-    'command = ["node", "' + path.join(root, 'src/platforms/codex/post-tool-use.js').replace(/\\/g, '\\\\') + '"]',
-    '[[hooks.subagent_stop]]',
-    'command = ["node", "' + path.join(root, 'src/platforms/codex/subagent-stop.js').replace(/\\/g, '\\\\') + '"]',
+    codexHookEntry('post_tool_use', 'post-tool-use.js', 'shell'),
+    codexHookEntry('post_tool_use', 'post-tool-use.js', 'apply_patch|write|edit'),
+    codexHookEntry('subagent_stop', 'subagent-stop.js'),
     '# --- end TodoPro hooks ---',
     '',
   ].join('\n');
 
-  // 追加(若已含 TodoPro 标记则跳过)
+  // 追加(去重:查 stop-hook.js 路径标志,不靠注释——用户改注释不影响去重)
   let existing = '';
   if (fs.existsSync(configPath)) existing = fs.readFileSync(configPath, 'utf8');
-  if (existing.includes('# --- TodoPro hooks')) {
+  if (existing.includes('todopro') && existing.includes('stop-hook.js')) {
     warn(configPath + ' 已含 TodoPro hooks,跳过');
   } else {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });

@@ -148,10 +148,24 @@ test('R7 全完成经 Bash → review引导 → 子agent → 放行+清理', () 
   const out1 = stopHook(DIR);
   assert.ok(out1.includes('"decision":"block"'), '应阻断引导 review');
   assert.ok(out1.includes('独立 review'), '应含 review 引导');
+  // out1 阻断时置了 review_pending,所以接下来起的子 agent 算 review 子 agent
   subagentStop(DIR);
   const out2 = stopHook(DIR);
-  assert.ok(!out2.includes('"decision":"block"'), '子agent后应放行');
+  assert.ok(!out2.includes('"decision":"block"'), 'review子agent后应放行');
   assert.ok(!fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json')), '应清理');
+});
+
+// R9:P1-2 回归——非 review 轮起的子 agent 不算 review 完成
+test('R9 全完成但未触发review引导时起的探索子agent → 不算review完成(仍阻断)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'completed' }] });
+  resetRound();
+  // 本轮先起了一个探索子 agent(不经 review 引导,review_pending=false)
+  subagentStop(DIR);
+  // Stop:应仍阻断引导 review(探索子 agent 不算 review 子 agent)
+  const out = stopHook(DIR);
+  assert.ok(out.includes('"decision":"block"'), '非review子agent不应算review完成,应仍阻断');
+  assert.ok(out.includes('独立 review'), '应引导 review');
 });
 
 // R8:优雅退化——模型用内置 TodoWrite(不经我们的脚本)→ 机制完全不触发

@@ -8,6 +8,13 @@
 // 所有提示词都标注"这是 TodoPro 的监护提示",让模型明确来源。
 // 注入量控制在 ~1-2K,在用户可接受范围。
 
+const sessionState = require('./session-state');
+
+// P3-6:从 session-state 读常量,不硬编码,改熔断阈值时提示词自动同步。
+const NUDGE_LIMIT = sessionState.NUDGE_LIMIT;
+const REVIEW_NUDGE_LIMIT = sessionState.REVIEW_NUDGE_LIMIT;
+const REVIEW_HARD_LIMIT = sessionState.REVIEW_HARD_LIMIT;
+
 // ─── 循环出口兜底:四选一 nudge ───
 // 注意:提示词里不写死平台路径(claude-code/codex),用 <todopro-tool> 占位,
 // 由适配层在注入时替换为实际脚本路径。这样核心提示词平台无关。
@@ -23,7 +30,7 @@ function nudgeFourWay(attempt) {
     '4. **知情停顿**(acknowledge_stall):`echo \'{"action":"acknowledge_stall"}\' | node <todopro-tool>` —— 本轮 knowingly 不推进,放行本轮,下轮继续监护(区别于 pause 的长期挂起)。',
     '',
     '(<todopro-tool> 是 TodoPro 脚本路径:Claude Code 用 src/platforms/claude-code/todopro-tool.js,Codex 用 src/platforms/codex/todopro-tool.js。详见 SKILL.md。)',
-    `(本次提醒第 ${attempt} 次,共 ${2} 次。超过将交还用户。)`,
+    `(本次提醒第 ${attempt} 次,共 ${NUDGE_LIMIT} 次。超过将交还用户。)`,
   ].join('\n');
 }
 
@@ -56,7 +63,7 @@ function reviewGuide(attempt) {
     '收到结果后:**所有档先客观查实是否属实,再考虑针对当前需求修不修,均可忽略**。',
     '若要修复,用 TodoPro 新增 todo 去修;修完会触发新一轮 review。',
     '',
-    `(本次 review 提醒第 ${attempt} 次,共 ${2} 次。超过将跳过 review。本会话最多 3 次 review。)`,
+    `(本次 review 提醒第 ${attempt} 次,共 ${REVIEW_NUDGE_LIMIT} 次。超过将跳过 review。本会话最多 ${REVIEW_HARD_LIMIT} 次 review。)`,
   ].join('\n');
 }
 

@@ -75,12 +75,17 @@ function decide(event, dir) {
              reason: 'session-paused' };
   }
 
+  // acknowledge_stall 不是会话级状态,是轮级意图(经 action 调用,不改 session.status)。
+  // 若因故落盘成 session.status,防御性当作 active 处理(不僵死),下轮继续监护。
+  // 正常路径下 acknowledge_stall 不会到这里(actionToSessionPatch 返回 null,不改 session.status)。
+  const sessionStatus = (e.sessionStatus === 'acknowledge_stall') ? 'active' : e.sessionStatus;
+
   // 读状态(计数器/标志)
   const st = sessionState.read(dir) || sessionState.DEFAULT_STATE;
 
   // 3. 有 pending 项(还没全完成)
-  const hasPending = e.todos && e.todos.some(t => t.status === 'pending' || t.status === 'in_progress');
-  if (hasPending) {
+  const hasPendingTodos = e.todos && e.todos.some(t => t.status === 'pending' || t.status === 'in_progress');
+  if (hasPendingTodos) {
     if (e.roundWroteTodo) {
       // 本轮推进了 → 放行(nudge 已在 markTodoWritten 时归零)
       return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
@@ -106,7 +111,13 @@ function decide(event, dir) {
   const allCompleted = e.todos && e.todos.length > 0 &&
     e.todos.every(t => t.status === 'completed');
   if (!allCompleted) {
-    // 既无 pending 也不全完成(可能全 paused/abandoned 单项)→ 放行不干预
+    // 既无 pending 也不全完成:可能是空 todos(P1-3)或全 paused/abandoned 单项。
+    // 空 todos + active → 僵尸会话,清理(P1-3 修复)。否则放行不干预。
+    if (e.todos && e.todos.length === 0 && sessionStatus === 'active') {
+      return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
+               markReviewDone: false, doCleanup: true, resetRoundFlags: true,
+               reason: 'empty-session-cleanup' };
+    }
     return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
              markReviewDone: false, doCleanup: false, resetRoundFlags: true,
              reason: 'no-pending-not-all-completed' };
@@ -121,19 +132,23 @@ function decide(event, dir) {
              reason: 'review-hard-limit' };
   }
 
-  // 本轮起过子 agent → review 完成,累计,放行+清理
-  if (e.roundSubagentFired) {
+  // P1-2 修复:只有"本轮起了 review 子 agent"才算 review 完成。
+  // roundSubagentFired 是"起了任何子 agent",不区分用途,不能直接当 review 完成。
+  // 用独立的 review_subagent_fired 标志(由 review 引导轮次起子 agent 时置位)。
+  // 详见 session-state.js 的 markReviewSubagentFired。
+  if (st.review_subagent_fired) {
     return { action: 'allow', injectText: prompts.reviewDoneAck(),
              bumpNudge: false, bumpReviewNudge: false, markReviewDone: true,
              doCleanup: true, resetRoundFlags: true,
              reason: 'review-completed' };
   }
 
-  // 本轮没起子 agent(review 到期但主 agent 糊弄/还没起)
+  // 本轮没起 review 子 agent(review 到期但主 agent 糊弄/还没起,或起了非review子agent)
   if (st.review_nudge_count < sessionState.REVIEW_NUDGE_LIMIT) {
-    // 阻断,注入 review 引导
+    // 阻断,注入 review 引导。markReviewPending 标记"现在起的子 agent 应是 review"
     return { action: 'block', injectText: prompts.reviewGuide(st.review_nudge_count + 1),
              bumpNudge: false, bumpReviewNudge: true, markReviewDone: false,
+             markReviewPending: true,
              doCleanup: false, resetRoundFlags: false,
              reason: 'review-nudge-' + (st.review_nudge_count + 1) };
   }

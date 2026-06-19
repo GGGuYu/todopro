@@ -520,15 +520,21 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 
 2. **SKILL.md description 的精确措辞与触发线阈值**:预计超过 N 步 / 涉及多文件——经验值,实现后按模型和成本调。当前用"3+ 步 / 多文件 / 想要 review"。
 
-3. **touched-files 记录范围**:当前只记编辑类工具(Write/Edit/MultiEdit/Bash 写),不记读操作。若发现 review 需要读操作上下文,再扩。
+3. **touched-files 记录范围**:当前只记编辑类工具(Write/Edit/MultiEdit/NotebookEdit/apply_patch),**不记 Bash/shell 写文件**(sed -i、echo > file 等),也不记读操作。原因:Bash 写太杂(可能跑测试、装包),噪音大;Bash 的文件改动靠 git diff 兜底。**注意:非 git 项目里,模型用 Bash 改的文件 touched-files.json 没有,review 子 agent 完全看不到——这是已知盲区**。若要补,matcher 加 Bash + extractFilePaths 从重定向提取(已有逻辑,只是 matcher 没配)。
 
-4. **acknowledge_stall 与 pause 的提示词区分**:当前靠文字说明,实现后观察模型是否选对,调参。
+4. **acknowledge_stall 与 pause 的提示词区分**:当前靠文字说明,实现后观察模型是否选对,调参。注意 acknowledge_stall 是轮级意图(经 action 调用,不改 session.status),不是会话级状态——若误设成 session.status,decide-stop 防御性当作 active 处理(不僵死)。
 
 5. **Hana 适配层未经实机验证**:extensions/index.js 基于 Pi SDK 事件签名写,但 Hana 的 `agent_end` 在主 agent 也触发、`turn_end` 不能阻止停止等差异,需在真实 Hana 环境跑一遍校准。Claude Code 和 Codex 的适配层已端到端验证。
 
-6. **Codex 的 TOML hooks 配置格式**:init.js 追加的 `[[hooks.stop]]` 段基于动机文档 3.3 的 schema,实际 Codex 版本的 TOML 字段名可能微调,装时验证。
+6. **Codex 的 TOML hooks 配置格式**:init.js 追加的 `[[hooks.stop]]` 段基于动机文档 3.3 的 schema,实际 Codex 版本的 TOML 字段名可能微调,装时验证。路径用 TOML 字面字符串(单引号)包裹,含空格安全(P2-5 已修)。
 
 7. **覆盖率**:走"用我们的工具才触发"路线,Claude Code 上模型用内置 TodoWrite 时整套机制不生效。这是接受的优雅退化。提高覆盖率靠 SKILL.md description,不靠拦内置 todo。
+
+8. **Codex 放行提示对模型不可见**(P2-2):Codex 的 stop 钩子,阻断时 exit 2 + stderr(stderr 当续跑提示注入对话,模型可见 ✓);但**放行时**(熔断交还用户 / review 完成确认 / review 跳过)exit 0,提示词只进 stderr 日志,**模型看不到**。这是 Codex 的限制(exit 0 不注入对话),与 Claude Code(additionalContext 可见)行为不一致。接受——放行提示本质是给用户看的收尾,模型不需要据此行动。改的话要 exit 2 续跑一次只为送提示,代价大不划算。
+
+9. **review-subagent-prompt.md 不入库**(P2-4):`.gitignore` 忽略 `.todopro/*`(除 README),所以 `.todopro/review-subagent-prompt.md` 不入库。源文件在 `skills/todopro/review-subagent-prompt.md`,**由 init 拷贝到 `.todopro/`**。新克隆者必须跑 init 才有这个文件。文档反复说"预置到 .todopro/"指的就是这个拷贝动作,不是入库。
+
+10. **Hana 无等价行为测试**(P3-5):跨平台一致性测试(cross-platform.test.js 12.2)只验证 Claude Code 与 Codex 决策等价,Hana 需 Pi 运行时无法在纯 Node 测试里跑。所谓"三平台一致性"实际只验证了两平台 + Hana 的代码静态检查(require 同一份 core)。Hana 的真实行为需实机验证(见限制 5)。
 
 ---
 
@@ -542,6 +548,8 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 | 假设 Claude Code/Codex 有 "TodoPro" 注册工具 | ❌ | 没有。模型靠 Bash 调脚本(决策 13)。matcher 必须是 Bash/shell |
 | 把 PostToolUse matcher 改回 "TodoPro" | ❌ | 永远不触发。必须是 Bash/shell + 命令内容识别 |
 | 测试绕过"模型怎么调到工具"这层 | ❌ | 必须走真实路径(tests/real-path.test.js)。直接调脚本会假绿 |
+| 把任何子 agent 结束当 review 完成 | ❌ | P1-2 修复:只有 review_pending=true 时起的子 agent 才算 review。用 review_subagent_fired 而非 subagent_fired_this_round 判断 |
+| 全量替换静默删除漏带项不给提示 | ❌ | P1-4 修复:oldTodos>newTodos 时返回 warning。模型需看到才能确认是否有意 |
 | 在 PostToolUse 对每个编辑注入建议 | ❌ | 违反原则 2(中间零干预)。只在边界点动手 |
 | 让 review 的 CRITICAL 必须修 | ❌ | 违反原则 4。全部先查实均可忽略,否则放大消耗 |
 | 加阻断分支但不配熔断 | ❌ | 违反原则 5。会卡死用户 |

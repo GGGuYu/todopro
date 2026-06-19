@@ -84,16 +84,18 @@ function runTool(dir) {
   if (!Array.isArray(todos)) {
     throw new Error('input must be {todos:[...]} or {action:"pause|abandon|acknowledge_stall"} or a todos array');
   }
-  const { data, oldTodos } = todoStore.replace(dir, todos);
+  const { data, oldTodos, warning } = todoStore.replace(dir, todos);
   todoMd.generate(dir, data);
   sessionState.markTodoWritten(dir);
-  return {
+  const result = {
     ok: true,
     oldTodos,
     todos: data.todos,
     session: data.session,
     note: 'todo.md 镜像已更新。继续干活;全部完成后会触发独立 review。',
   };
+  if (warning) result.warning = warning;  // P1-4:静默删除提示
+  return result;
 }
 
 module.exports = { runTool, readInput, EXIT_ACTIONS, actionToSessionPatch };

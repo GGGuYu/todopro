@@ -31,6 +31,7 @@ function getDiff(dir, opts) {
   try {
     // 先尝试 git diff HEAD(有提交时)
     let diff = '';
+    let diffOverflowed = false;
     try {
       diff = execSync('git diff HEAD --no-color', {
         cwd,
@@ -38,8 +39,21 @@ function getDiff(dir, opts) {
         maxBuffer: maxBytes,
       }).toString('utf8');
     } catch (e) {
-      // 没有 HEAD 或 diff 太大,降级
+      // P3-3:区分两种失败。
+      //   - 无 HEAD(ENOENT/exit code 128 "unknown revision"):降级到未跟踪文件,文案准确。
+      //   - maxBuffer 超限(diff 太大):标记 overflowed,不降级到"未跟踪文件"(会误导),
+      //     改返回截断提示。
+      const msg = String(e.message || '');
+      if (msg.includes('maxBuffer')) {
+        diffOverflowed = true;
+      }
+      // git diff HEAD 在无 HEAD 时 exit code 非 0,stderr 含 "unknown revision" 或类似
+      // 这种情况下 diff 保持空,走未跟踪文件分支(正确)
       diff = '';
+    }
+
+    if (diffOverflowed) {
+      return '(git diff 输出超过 ' + maxBytes + ' 字节上限,已省略。请缩小改动范围或手动查看 git diff。)';
     }
 
     // 若 diff 为空,可能是全新仓库无 HEAD,或无改动。补充未跟踪文件清单。

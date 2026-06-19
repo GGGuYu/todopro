@@ -13,7 +13,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { paths } = require('./paths');
 
 const VALID_STATUS = new Set(['pending', 'in_progress', 'completed', 'paused', 'abandoned']);
@@ -131,7 +130,23 @@ function replace(dir, newTodos, sessionPatch) {
     ),
   };
   fs.writeFileSync(p.todoJson, JSON.stringify(data, null, 2) + '\n', 'utf8');
-  return { data, oldTodos };
+
+  // P1-4:全量替换若静默删除了旧项(oldTodos 比 newTodos 多),给调用方一个 warning。
+  // 落盘 + 被钩子 diff 追踪,静默删除会让"本轮推进"判断和 review 基于残缺数据。
+  // 不阻断(全量替换语义允许删),但提示模型注意是否漏带了项。
+  let warning = null;
+  if (oldTodos.length > normalized.length) {
+    const removedIds = oldTodos
+      .filter(t => !usedIds.has(t.id))
+      .map(t => t.id);
+    if (removedIds.length > 0) {
+      warning = '注意:本次全量替换删除了 ' + removedIds.length + ' 个旧 todo 项(id: ' +
+        removedIds.join(', ') + ')。若非有意,请确认是否漏带了这些项——' +
+        'TodoPro 落盘且被钩子追踪,漏带会导致进度数据残缺。';
+    }
+  }
+
+  return { data, oldTodos, warning };
 }
 
 // 查询便利方法

@@ -114,7 +114,9 @@ test('8.6 清理:删运行时文件', () => {
   // 放 review-subagent-prompt.md(预置)
   fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'review-subagent-prompt.md'), 'rules', 'utf8');
   execSync(`node -e "require('${ROOT.replace(/'/g,"'\\''")}/src/core/session-state').resetRoundFlags()"`, { env: process.env });
-  hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' });
+  // P1-2:先触发 review-nudge(置 review_pending),再起子 agent(才算 review 子 agent)
+  hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-nudge1,置 review_pending
+  hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' }); // review_pending=true → review_subagent_fired
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review 完成+清理
   assert.strictEqual(todoExists(), false, 'todo.json 应删');
   assert.strictEqual(fs.existsSync(path.join(process.env.TODOPRO_DIR, 'review-subagent-prompt.md')), true, 'review-subagent-prompt 应保留');
