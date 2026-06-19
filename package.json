@@ -1,0 +1,13 @@
+{
+  "name": "todopro",
+  "version": "0.1.0",
+  "description": "Todo-gated agent harness: optional enhanced todo tool that triggers loop-exit guard, completion review, and file tracking. Cross-platform (Claude Code / Codex / Hana). Zero npm dependencies.",
+  "type": "commonjs",
+  "bin": {
+    "todopro-init": "./src/install/init.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

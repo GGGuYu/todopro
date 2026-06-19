@@ -1,11 +1,9 @@
 # --- TodoPro 运行时文件(每次会话生成/清理,不入库) ---
-.todopro/todo.json
-.todopro/todo.md
-.todopro/requirement-summary.md
-.todopro/touched-files.json
-.todopro/session-state.json
+# 保留目录下的 README.md(说明文件),忽略运行时产物
+.todopro/*
+!.todopro/README.md
 
-# 注意:.todopro/review-subagent-prompt.md 是预置静态文件,需入库(见 skills/ 下源文件,init 时拷贝)
+# review-subagent-prompt.md 的源文件在 skills/todopro/,init 时拷贝到 .todopro/
 
 # --- macOS ---
 .DS_Store

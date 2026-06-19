@@ -1,16 +1,16 @@
 ## 1. 项目骨架与目录结构
 
-- [ ] 1.1 建立 `src/core/`(平台无关核心脚本)、`src/platforms/claude-code/`、`src/platforms/codex/`、`src/platforms/hana/`(各平台薄适配层)、`src/install/`(init 引导程序)、`skills/todopro/`(SKILL.md 与预置文件)目录
-- [ ] 1.2 定义 `.todopro/` 运行时目录结构与各文件职责(todo.json/todo.md/requirement-summary.md/review-subagent-prompt.md/touched-files.json/session-state.json)
-- [ ] 1.3 在仓库根添加 `.gitignore` 忽略 `.todopro/` 运行时文件(保留 review-subagent-prompt.md 等 prebuilt)
+- [x] 1.1 建立 `src/core/`(平台无关核心脚本)、`src/platforms/claude-code/`、`src/platforms/codex/`、`src/platforms/hana/`(各平台薄适配层)、`src/install/`(init 引导程序)、`skills/todopro/`(SKILL.md 与预置文件)目录
+- [x] 1.2 定义 `.todopro/` 运行时目录结构与各文件职责(todo.json/todo.md/requirement-summary.md/review-subagent-prompt.md/touched-files.json/session-state.json)
+- [x] 1.3 在仓库根添加 `.gitignore` 忽略 `.todopro/` 运行时文件(保留 review-subagent-prompt.md 等 prebuilt)
 
 ## 2. 核心数据层(平台无关,零依赖 Node)
 
-- [ ] 2.1 实现 `src/core/todo-store.js`:读写 `.todopro/todo.json`,全量替换语义,返回 oldTodos,校验"最多 1 个 in_progress",分配稳定 id(新增项给未使用 id),回填 updated_at
-- [ ] 2.2 实现 `src/core/todo-md-mirror.js`:`.todopro/todo.json` 变更后生成只读 `.todopro/todo.md` 镜像(checkbox 格式)
-- [ ] 2.3 实现 `src/core/session-state.js`:维护 session-state.json(session.status / review_done / nudge_count / review_nudge_count / wrote_todo_this_round / subagent_fired_this_round 等标志与计数,含复位逻辑)
-- [ ] 2.4 实现 `src/core/touched-files.js`:追加编辑过的文件路径到 touched-files.json(去重)
-- [ ] 2.5 实现 `src/core/git-diff.js`:用 child_process 跑 `git diff`,非 git 仓库时降级返回空
+- [x] 2.1 实现 `src/core/todo-store.js`:读写 `.todopro/todo.json`,全量替换语义,返回 oldTodos,校验"最多 1 个 in_progress",分配稳定 id(新增项给未使用 id),回填 updated_at
+- [x] 2.2 实现 `src/core/todo-md-mirror.js`:`.todopro/todo.json` 变更后生成只读 `.todopro/todo.md` 镜像(checkbox 格式)
+- [x] 2.3 实现 `src/core/session-state.js`:维护 session-state.json(session.status / review_done / nudge_count / review_nudge_count / wrote_todo_this_round / subagent_fired_this_round 等标志与计数,含复位逻辑)
+- [x] 2.4 实现 `src/core/touched-files.js`:追加编辑过的文件路径到 touched-files.json(去重)
+- [x] 2.5 实现 `src/core/git-diff.js`:用 child_process 跑 `git diff`,非 git 仓库时降级返回空
 
 ## 3. 核心判断逻辑(平台无关,Stop 钩子决策表)
 
