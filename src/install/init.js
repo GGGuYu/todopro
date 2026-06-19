@@ -145,6 +145,10 @@ function installGlobal(root) {
   fs.copyFileSync(path.join(root, 'skills/todopro/SKILL.md'), path.join(GLOBAL_DIR, 'SKILL.md'));
   fs.copyFileSync(path.join(root, 'skills/todopro/review-subagent-prompt.md'), path.join(GLOBAL_DIR, 'review-subagent-prompt.md'));
 
+  // 清理旧版嵌套结构(之前 bug 留下的 ~/.agents/skills/todopro/skills/todopro/...)
+  const oldSkillsDir = path.join(GLOBAL_DIR, 'skills');
+  if (fs.existsSync(oldSkillsDir)) { removeDir(oldSkillsDir); }
+
   ok('全局安装完成(src/ + skills/ 已复制到 ' + GLOBAL_DIR + ')');
   return GLOBAL_DIR;
 }
