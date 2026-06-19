@@ -305,11 +305,17 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 **选择**:review 满足(或熔断)且放行退出时,删运行时文件,不归档。
 
 **删除**:`todo.json` / `todo.md` / `requirement-summary.md` / `touched-files.json` / `session-state.json`。
-**保留**:`review-subagent-prompt.md`(预置静态,复用)。
+**保留**:`review-subagent-prompt.md`(预置静态,复用) + `README.md`(init 生成,说明文件职责)。
 
-**触发时机**:放行退出的那一刻(**不是**"全完成"那一刻)——因为全完成后还要跑 review、可能还要修 review 发现的问题(会新增 todo,状态回到"有 pending"),只有真正放行退出才算需求彻底结束。
+**触发时机**:放行退出的那一刻(**不是**"全完成"那一刻)。具体:
+- reviewed-exit(全完成 + review_done,真正退出)→ cleanup
+- nudge 熔断(交还用户)→ cleanup
+- review 熔断/硬上限 → cleanup
+- abandoned(session 级)→ cleanup
+- 空 todos 或全单项 abandoned/paused(无有效待办,问题5+6 修复)→ cleanup
+- **不 cleanup**:review-completed(保留 review_total_count 供硬上限,P0-1)
 
-**为什么删不归档**:归档会攒文件,违背"零负担"。前后需求不混靠清理保证,不靠历史。若要审计,git 历史和平台 transcript 已有记录。
+**为什么删不归档**:归档会攒文件,违背"零负担"。前后需求不混靠清理保证,不靠历史。
 
 ### 决策 10:核心脚本零依赖纯 Node
 

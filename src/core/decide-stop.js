@@ -111,12 +111,17 @@ function decide(event, dir) {
   const allCompleted = e.todos && e.todos.length > 0 &&
     e.todos.every(t => t.status === 'completed');
   if (!allCompleted) {
-    // 既无 pending 也不全完成:可能是空 todos(P1-3)或全 paused/abandoned 单项。
-    // 空 todos + active → 僵尸会话,清理(P1-3 修复)。否则放行不干预。
-    if (e.todos && e.todos.length === 0 && sessionStatus === 'active') {
+    // 既无 pending 也不全完成:可能是空 todos、全 paused/abandoned 单项。
+    // 问题5+6 修复:这些情况都是"没有有意义的待办",应清理避免僵尸会话。
+    //   - 空 todos(P1-3):不论 sessionStatus(active/paused/completed)都清理
+    //   - 全单项 abandoned(问题5):模型误把单项设 abandoned 而非 session 级 action,清理
+    //   - 全单项 paused:同理,无有效待办,清理
+    const allAbandoned = e.todos && e.todos.length > 0 &&
+      e.todos.every(t => t.status === 'abandoned' || t.status === 'paused');
+    if ((e.todos && e.todos.length === 0) || allAbandoned) {
       return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
                markReviewDone: false, doCleanup: true, resetRoundFlags: true,
-               reason: 'empty-session-cleanup' };
+               reason: 'empty-or-no-effective-todos-cleanup' };
     }
     return { action: 'allow', injectText: null, bumpNudge: false, bumpReviewNudge: false,
              markReviewDone: false, doCleanup: false, resetRoundFlags: true,

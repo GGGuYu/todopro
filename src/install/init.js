@@ -57,6 +57,29 @@ function todoproRoot() {
   return path.resolve(__dirname, '..', '..');
 }
 
+// 生成 .todopro/README.md(运行时目录说明)。三平台共用。
+// 问题1 修复:README/AGENTS 引用此文件但从未创建,断链。
+function writeTodoproReadme(todoproDir) {
+  const content = [
+    '# `.todopro/` 运行时目录',
+    '',
+    '本目录由 TodoPro 在监护期间生成,会话放行退出时自动清理(除预置静态文件)。',
+    '源文件在 `skills/todopro/`,init 时拷贝/生成到此。',
+    '',
+    '| 文件 | 谁写 | 职责 | 清理时 |',
+    '|---|---|---|---|',
+    '| `todo.json` | 模型(经 TodoPro 工具全量替换)+ 钩子回填 updated_at | 唯一真相源。完整 todo 列表 + session.status | 删 |',
+    '| `todo.md` | 钩子自动生成 | todo.json 的只读 Markdown 镜像 | 删 |',
+    '| `requirement-summary.md` | 主 Agent(review 时写) | 详细需求总结,不写实现方法。复写覆盖 | 删 |',
+    '| `review-subagent-prompt.md` | 预置(init 拷贝) | review 子 agent 审查规则。复用不删 | **保留** |',
+    '| `touched-files.json` | PostToolUse 钩子自动 | 监护期间被编辑类工具碰过的文件路径 | 删 |',
+    '| `session-state.json` | 钩子维护 | 会话级状态(计数、轮标志、review_done) | 删 |',
+    '',
+    '> 此文件由 `init` 自动生成,不入库(.gitignore 忽略 .todopro/* 但保留 README)。',
+  ].join('\n') + '\n';
+  fs.writeFileSync(path.join(todoproDir, 'README.md'), content, 'utf8');
+}
+
 // ─── 平台检测 ───
 function detectPlatform(dir) {
   // Claude Code:项目根有 .claude/
@@ -146,6 +169,7 @@ function installClaudeCode(dir) {
   copyFile(path.join(root, 'skills/todopro/review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
   ok('review-subagent-prompt.md 已预置到 .todopro/');
+  writeTodoproReadme(todoproDir);
 
   // 5. 确保核心脚本路径可达(todopro 仓库需在项目内或 CLAUDE_PROJECT_DIR 指向它)
   if (!dir.startsWith(root) && root !== dir && !fs.existsSync(path.join(dir, 'src/core/decide-stop.js'))) {
@@ -221,6 +245,7 @@ function installCodex(dir) {
   fs.mkdirSync(todoproDir, { recursive: true });
   copyFile(path.join(root, 'skills/todopro/review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
+  writeTodoproReadme(todoproDir);
 
   console.log();
   ok('Codex 安装完成。');
@@ -276,6 +301,7 @@ function installHana(dir) {
   fs.mkdirSync(todoproDir, { recursive: true });
   copyFile(path.join(root, 'skills/todopro/review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
+  writeTodoproReadme(todoproDir);
 
   console.log();
   ok('Hana 安装完成。');

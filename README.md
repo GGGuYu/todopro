@@ -96,7 +96,7 @@ While the guard is active, a PostToolUse hook (matching edit-class tools only) a
 
 ### 5. Cleanup: delete, on exit
 
-When the session finally exits (review done or circuit-broken), TodoPro deletes the runtime files (`todo.json`, `todo.md`, `requirement-summary.md`, `touched-files.json`, `session-state.json`) so consecutive requirements don't mix. The pre-written `review-subagent-prompt.md` is kept for reuse.
+When the session finally exits (review done or circuit-broken), TodoPro deletes the runtime files (`todo.json`, `todo.md`, `requirement-summary.md`, `touched-files.json`, `session-state.json`) so consecutive requirements don't mix. The pre-written `review-subagent-prompt.md` and `README.md` are kept for reuse.
 
 ## 安装
 
