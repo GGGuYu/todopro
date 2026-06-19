@@ -111,24 +111,36 @@ git clone https://github.com/GGGuYu/todopro.git todopro && cd todopro
 node src/install/init.js
 ```
 
-首次运行会弹出**交互式多选提示**，自动检测当前环境中的平台并预勾选，用 ↑/↓ 导航、空格切换、回车确认即可一键安装。
+安装分两步:
+1. **全局安装**:把脚本和 SKILL 复制到 `~/.agents/skills/todopro/`(自包含,所有项目共享)
+2. **平台配置**:为选中的工具配置 hook(指向全局路径)+ 放 SKILL.md + 预置 review-prompt
 
-也可用 `--platform` 静默指定（适用于 CI / 自动化）：
+首次运行会弹出**交互式多选提示**,自动检测当前环境中的平台并预勾选,用 ↑/↓ 导航、空格切换、回车确认即可一键安装。
+
+也可用 `--platform` 静默指定(适用于 CI / 自动化):
 
 ```bash
 node src/install/init.js --platform claude-code   # 单平台
 node src/install/init.js --platform all            # 全部平台
 ```
 
-安装后**重启/重载**你的 Agent 平台以使 hooks 生效。
+安装后**重启/重载**你的 Agent 平台以使 hooks 生效。hooks 指向全局 `~/.agents/skills/todopro/`,**在任何项目目录都生效**,不依赖仓库位置。
+
+### 更新
+
+```bash
+cd todopro && git pull
+node src/install/init.js --update    # 只刷新全局安装(不重配 hook)
+```
 
 ### `init` 做了什么
 
 | 平台 | 动作 |
 |---|---|
-| **Claude Code** | Merges hooks into `.claude/settings.json` (preserves your existing config, idempotent), places `SKILL.md` at `.claude/skills/todopro/`, pre-writes `review-subagent-prompt.md` to `.todopro/` |
-| **Codex** | Appends a `[hooks]` block to `config.toml` (marked, idempotent), places `SKILL.md`, pre-writes the review prompt |
-| **Hana** | Installs a full-access plugin to `${HANA_HOME}/plugins/todopro/` (manifest + extensions + tools + skills + bundled core), pre-writes the review prompt. Requires enabling "允许全权插件" in Hana settings |
+| **全局** | 复制 `src/` + `skills/` 到 `~/.agents/skills/todopro/`(自包含) |
+| **Claude Code** | Merges hooks into `.claude/settings.json` (command 指向全局, preserves existing config, idempotent), places `SKILL.md` at `.claude/skills/todopro/`, pre-writes `review-subagent-prompt.md` to `.todopro/` |
+| **Codex** | Appends a `[hooks]` block to `config.toml` (command 指向全局, idempotent), places `SKILL.md`, pre-writes the review prompt |
+| **Hana** | Installs a full-access plugin to `${HANA_HOME}/plugins/todopro/` (manifest + extensions/tools/core **软链到全局**, skills + pre-writes review prompt). Requires enabling "允许全权插件" in Hana settings |
 
 `init` is **idempotent** — running it twice won't duplicate hook entries.
 

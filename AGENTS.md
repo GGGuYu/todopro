@@ -604,11 +604,16 @@ node src/install/init.js
 
 init 做的事:
 1. 检测 Node(缺失报错退出)
-2. 检测平台并弹出交互式选择(或用 `--platform` 静默指定)
-3. **Claude Code**:merge hooks 进 `.claude/settings.json`(保留用户已有配置,幂等去重)、放 SKILL.md 到 `.claude/skills/todopro/`、预置 `review-subagent-prompt.md` 到 `.todopro/`
-4. **Codex**:追加 `[hooks]` 段到 `config.toml`(含 TodoPro 标记,幂等)、放 SKILL.md、预置 review prompt
-5. **Hana**:装 full-access 插件到 `${HANA_HOME}/plugins/todopro/`(manifest + extensions + tools + skills + core bundle)、预置 review prompt
-6. 提示重载
+2. **全局安装**:复制 `src/` + `skills/` 到 `~/.agents/skills/todopro/`(自包含,所有项目共享)
+3. 检测平台并弹出交互式选择(或用 `--platform` 静默指定)
+4. **Claude Code**:merge hooks 进 `.claude/settings.json`(**command 用全局绝对路径**,不依赖仓库在项目内;保留用户已有配置,幂等去重)、复制 SKILL.md 到 `.claude/skills/todopro/`、预置 `review-subagent-prompt.md` + README 到 `.todopro/`
+5. **Codex**:追加 `[hooks]` 段到 `config.toml`(command 用全局绝对路径,幂等)、复制 SKILL.md、预置 review prompt
+6. **Hana**:装 full-access 插件到 `${HANA_HOME}/plugins/todopro/`(manifest 复制;extensions/tools/core **软链到全局**,回退复制;skills 复制)、预置 review prompt
+7. 提示重载
+
+**`--update`**:`init --update` 只刷新全局安装(从仓库覆盖 `~/.agents/skills/todopro/`),不重配 hook。开发态更新代码后用。
+
+**关键**:hooks 指向全局 `~/.agents/skills/todopro/`,**在任何项目目录都生效**,不依赖仓库在项目内。装一次,所有项目可用。
 
 ### 使用
 
