@@ -4,7 +4,7 @@
 // 仅用 Node 内置模块(零依赖)。
 //
 // 架构(全局安装 + 软链/hook 绝对路径):
-//   1. installGlobal: 把 src/ + skills/ 复制到 ~/.agents/skills/todopro/(全局自包含)
+//   1. installGlobal: 把 src/ + SKILL.md + review-subagent-prompt.md 复制到 ~/.agents/skills/todopro/(全局自包含,标准 skill 结构)
 //   2. 各工具安装: hook command 用全局绝对路径(不依赖仓库在项目内)
 //      - Claude Code: merge hooks 进 .claude/settings.json,command 指向全局
 //      - Codex: append [hooks] 到 config.toml,command 指向全局
@@ -141,8 +141,9 @@ function installGlobal(root) {
   // 复制 src/install/init.js(删掉仓库后仍需 --update / --uninstall)
   fs.mkdirSync(path.join(GLOBAL_DIR, 'src/install'), { recursive: true });
   fs.copyFileSync(path.join(root, 'src/install/init.js'), path.join(GLOBAL_DIR, 'src/install/init.js'));
-  // 复制 skills/todopro/
-  copyDir(path.join(root, 'skills/todopro'), path.join(GLOBAL_DIR, 'skills/todopro'));
+  // 复制 SKILL.md + review-subagent-prompt.md 到全局目录根(标准 skill 结构:~/.agents/skills/todopro/SKILL.md)
+  fs.copyFileSync(path.join(root, 'skills/todopro/SKILL.md'), path.join(GLOBAL_DIR, 'SKILL.md'));
+  fs.copyFileSync(path.join(root, 'skills/todopro/review-subagent-prompt.md'), path.join(GLOBAL_DIR, 'review-subagent-prompt.md'));
 
   ok('全局安装完成(src/ + skills/ 已复制到 ' + GLOBAL_DIR + ')');
   return GLOBAL_DIR;
@@ -221,13 +222,13 @@ function installClaudeCode(dir, globalDir) {
   // 3. 放 SKILL.md 到 .claude/skills/todopro/(复制,不软链——小文件且 Claude Code 可能不跟随软链)
   const skillDir = path.join(claudeDir, 'skills', 'todopro');
   fs.mkdirSync(skillDir, { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/SKILL.md'), path.join(skillDir, 'SKILL.md'));
+  fs.copyFileSync(path.join(globalDir, 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   ok('SKILL.md 已放到 ' + path.relative(dir, skillDir));
 
   // 4. 预置 review-subagent-prompt.md + README.md 到项目 .todopro/
   const todoproDir = path.join(dir, '.todopro');
   fs.mkdirSync(todoproDir, { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/review-subagent-prompt.md'),
+  fs.copyFileSync(path.join(globalDir, 'review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
   ok('review-subagent-prompt.md 已预置到 .todopro/');
   writeTodoproReadme(todoproDir);
@@ -284,13 +285,13 @@ function installCodex(dir, globalDir) {
   // SKILL.md
   const skillDir = path.join(codexDir, 'skills', 'todopro');
   fs.mkdirSync(skillDir, { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/SKILL.md'), path.join(skillDir, 'SKILL.md'));
+  fs.copyFileSync(path.join(globalDir, 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   ok('SKILL.md 已放到 ' + skillDir);
 
   // 预置 review-subagent-prompt.md
   const todoproDir = path.join(dir, '.todopro');
   fs.mkdirSync(todoproDir, { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/review-subagent-prompt.md'),
+  fs.copyFileSync(path.join(globalDir, 'review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
   writeTodoproReadme(todoproDir);
 
@@ -333,7 +334,7 @@ function installHana(dir, globalDir) {
 
   // SKILL.md(复制)
   fs.mkdirSync(path.join(pluginDir, 'skills', 'todopro'), { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/SKILL.md'),
+  fs.copyFileSync(path.join(globalDir, 'SKILL.md'),
            path.join(pluginDir, 'skills/todopro/SKILL.md'));
   ok('SKILL.md 已放到插件 skills/');
 
@@ -349,7 +350,7 @@ function installHana(dir, globalDir) {
   // 预置 review-subagent-prompt.md
   const todoproDir = path.join(dir, '.todopro');
   fs.mkdirSync(todoproDir, { recursive: true });
-  fs.copyFileSync(path.join(globalDir, 'skills/todopro/review-subagent-prompt.md'),
+  fs.copyFileSync(path.join(globalDir, 'review-subagent-prompt.md'),
            path.join(todoproDir, 'review-subagent-prompt.md'));
   writeTodoproReadme(todoproDir);
 
