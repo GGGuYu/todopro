@@ -4,6 +4,8 @@
 // 仅用 Node 内置模块(零依赖)。
 
 const { readStdin, emit } = require('./util');
+const { setPlatform } = require('../../core/paths');
+setPlatform('claude-code');
 const { runPostToolUse } = require('../../core/run-post-tool-use');
 
 function main() {

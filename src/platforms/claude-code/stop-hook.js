@@ -6,6 +6,8 @@
 
 const { readStdin, stopOutput, emit } = require('./util');
 const path = require('path');
+const { setPlatform } = require('../../core/paths');
+setPlatform('claude-code');
 const { runStop } = require('../../core/run-stop');
 
 // 本平台 todopro-tool.js 路径(用于替换提示词占位,给模型可用命令)

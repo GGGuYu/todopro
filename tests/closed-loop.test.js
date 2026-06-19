@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
+// 平台隔离:测试 Claude Code 适配器,文件和内联调用都指向 .todopro/claude-code/
+process.env.TODOPRO_PLATFORM = 'claude-code';
 let PASS = 0, FAIL = 0;
 
 function test(name, fn) {
@@ -36,12 +38,14 @@ function fresh(dir) {
   fs.mkdirSync(dir, { recursive: true });
   process.env.TODOPRO_DIR = path.join(dir, '.todopro');
 }
+// 平台隔离后,Claude Code 的钩子读写 .todopro/claude-code/ 子目录
+const PLATFORM = 'claude-code';
 function stateFile() {
-  try { return JSON.parse(fs.readFileSync(path.join(process.env.TODOPRO_DIR, 'session-state.json'), 'utf8')); }
+  try { return JSON.parse(fs.readFileSync(path.join(process.env.TODOPRO_DIR, PLATFORM, 'session-state.json'), 'utf8')); }
   catch (e) { return null; }
 }
 function todoExists() {
-  return fs.existsSync(path.join(process.env.TODOPRO_DIR, 'todo.json'));
+  return fs.existsSync(path.join(process.env.TODOPRO_DIR, PLATFORM, 'todo.json'));
 }
 
 const DIR = '/tmp/todopro-test-cl';
@@ -88,7 +92,7 @@ test('8.4 全完成 → review引导 → 起子agent → 放行+清理', () => {
   assert.ok(out1 && out1.decision === 'block', '应 block 引导 review');
   assert.ok(out1.hookSpecificOutput.additionalContext.includes('独立 review'), '应含 review 引导');
   // 主 agent 按流程先写 requirement-summary.md(P1-2 残留修复:SubagentStop 检查它存在才算 review)
-  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, PLATFORM, 'requirement-summary.md'), '需求总结', 'utf8');
   // 模拟起子 agent
   hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' });
   const out2 = hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' });
@@ -120,7 +124,7 @@ test('8.6 清理:删运行时文件', () => {
   execSync(`node -e "require('${ROOT.replace(/'/g,"'\\''")}/src/core/session-state').resetRoundFlags()"`, { env: process.env });
   // P1-2:先触发 review-nudge(置 review_pending),写 requirement-summary,再起子 agent(才算 review 子 agent)
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-nudge1,置 review_pending
-  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, PLATFORM, 'requirement-summary.md'), '需求总结', 'utf8');
   hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' }); // review_pending=true + summary存在 → review_subagent_fired
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-completed(不 cleanup,P0-1)
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // reviewed-exit → cleanup
@@ -137,7 +141,7 @@ test('8.7 优雅退化:无 .todopro(用内置todo)→ Stop 不触发任何机制
   assert.strictEqual(todoExists(), false, '不应有 .todopro');
   // PostToolUse 编辑类工具:无活跃会话 → 不记 touched-files
   hook('post-tool-use.js', { cwd: DIR, hook_event_name: 'PostToolUse', tool_name: 'Write', tool_input: { file_path: '/tmp/x.js' } });
-  assert.strictEqual(fs.existsSync(path.join(process.env.TODOPRO_DIR, 'touched-files.json')), false, '无活跃会话不应记 touched-files');
+  assert.strictEqual(fs.existsSync(path.join(process.env.TODOPRO_DIR, PLATFORM, 'touched-files.json')), false, '无活跃会话不应记 touched-files');
 });
 
 console.log('\n结果:' + PASS + ' 通过, ' + FAIL + ' 失败');

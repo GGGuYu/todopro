@@ -7,6 +7,8 @@
 //   若不一致,用 TODOPRO_DIR 环境变量统一。
 // 仅用 Node 内置模块(零依赖)。
 
+const { setPlatform } = require('../../core/paths');
+setPlatform('claude-code');
 const { runTool } = require('../../core/run-todopro-tool');
 
 try {

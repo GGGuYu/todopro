@@ -57,21 +57,23 @@ test('12.2 同一状态下 Claude Code 与 Codex 决策一致(阻断时都阻断
   fs.mkdirSync(dir1, { recursive: true });
   fs.mkdirSync(dir2, { recursive: true });
 
-  // 两边都建同样的 todo(有 pending,in_progress)
-  for (const d of [dir1, dir2]) {
-    const env = Object.assign({}, process.env, { TODOPRO_DIR: d + '/.todopro' });
-    execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/claude-code/todopro-tool.js"`, { env });
-    // 复位轮标志
-    execSync(`node -e "require('${ROOT}/src/core/session-state').resetRoundFlags()"`, { env });
-  }
+  // 两边都建同样的 todo(有 pending,in_progress),各自用自己平台的工具
+  // dir1 = Claude Code
+  let env = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro', TODOPRO_PLATFORM: 'claude-code' });
+  execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/claude-code/todopro-tool.js"`, { env });
+  execSync(`node -e "require('${ROOT}/src/core/session-state').resetRoundFlags()"`, { env });
+  // dir2 = Codex
+  env = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro', TODOPRO_PLATFORM: 'codex' });
+  execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/codex/todopro-tool.js"`, { env });
+  execSync(`node -e "require('${ROOT}/src/core/session-state').resetRoundFlags()"`, { env });
 
   // 跑 Claude Code stop-hook
-  const env1 = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro' });
+  const env1 = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro', TODOPRO_PLATFORM: 'claude-code' });
   const ccOut = execSync(`echo '{"cwd":"${dir1}","hook_event_name":"Stop"}' | node "${ROOT}/src/platforms/claude-code/stop-hook.js"`, { env: env1, encoding: 'utf8' });
   const ccBlocked = ccOut.includes('"decision":"block"');
 
   // 跑 Codex stop-hook(注意两边状态独立,需同样复位)
-  const env2 = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro' });
+  const env2 = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro', TODOPRO_PLATFORM: 'codex' });
   execSync(`node -e "require('${ROOT}/src/core/session-state').resetRoundFlags()"`, { env: env2 });
   let codexBlocked = false, codexExit = 0;
   try {
@@ -92,16 +94,20 @@ test('12.2b 两平台推进后均放行', () => {
   for (const d of [dir1, dir2]) {
     fs.rmSync(d, { recursive: true, force: true });
     fs.mkdirSync(d, { recursive: true });
-    const env = Object.assign({}, process.env, { TODOPRO_DIR: d + '/.todopro' });
-    execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/claude-code/todopro-tool.js"`, { env });
-    // 模拟推进(置标志)
-    execSync(`echo '{"cwd":"${d}","tool_name":"TodoPro","tool_input":{}}' | node "${ROOT}/src/platforms/claude-code/post-tool-use.js"`, { env });
   }
-  const env1 = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro' });
+  // dir1 = Claude Code
+  let env = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro', TODOPRO_PLATFORM: 'claude-code' });
+  execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/claude-code/todopro-tool.js"`, { env });
+  execSync(`echo '{"cwd":"${dir1}","tool_name":"TodoPro","tool_input":{}}' | node "${ROOT}/src/platforms/claude-code/post-tool-use.js"`, { env });
+  // dir2 = Codex
+  env = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro', TODOPRO_PLATFORM: 'codex' });
+  execSync(`echo '[{"content":"a","status":"in_progress"}]' | node "${ROOT}/src/platforms/codex/todopro-tool.js"`, { env });
+  execSync(`echo '{"cwd":"${dir2}","tool_name":"TodoPro","tool_input":{}}' | node "${ROOT}/src/platforms/codex/post-tool-use.js"`, { env });
+  const env1 = Object.assign({}, process.env, { TODOPRO_DIR: dir1 + '/.todopro', TODOPRO_PLATFORM: 'claude-code' });
   const ccOut = execSync(`echo '{"cwd":"${dir1}","hook_event_name":"Stop"}' | node "${ROOT}/src/platforms/claude-code/stop-hook.js"`, { env: env1, encoding: 'utf8' });
   const ccBlocked = ccOut.includes('"decision":"block"');
 
-  const env2 = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro' });
+  const env2 = Object.assign({}, process.env, { TODOPRO_DIR: dir2 + '/.todopro', TODOPRO_PLATFORM: 'codex' });
   execSync(`echo '{"cwd":"${dir2}","tool_name":"TodoPro","tool_input":{}}' | node "${ROOT}/src/platforms/codex/post-tool-use.js"`, { env: env2 });
   let codexBlocked = false;
   try {

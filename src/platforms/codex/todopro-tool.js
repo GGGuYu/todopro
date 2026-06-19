@@ -5,6 +5,8 @@
 // 用法:echo '<todos JSON>' | node todopro-tool.js  或  node todopro-tool.js '<todos JSON>'
 // 仅用 Node 内置模块(零依赖)。
 
+const { setPlatform } = require('../../core/paths');
+setPlatform('codex');
 const { runTool } = require('../../core/run-todopro-tool');
 
 try {

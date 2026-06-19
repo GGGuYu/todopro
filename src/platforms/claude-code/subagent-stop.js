@@ -8,6 +8,8 @@
 // design: 决策 7(review 轮若无子 agent 调用则算 rv_nudge)
 
 const { readStdin, emit } = require('./util');
+const { setPlatform } = require('../../core/paths');
+setPlatform('claude-code');
 const sessionState = require('../../core/session-state');
 
 function main() {

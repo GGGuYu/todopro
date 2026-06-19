@@ -5,6 +5,8 @@
 
 const { readStdin, stopEmit } = require('./util');
 const path = require('path');
+const { setPlatform } = require('../../core/paths');
+setPlatform('codex');
 const { runStop } = require('../../core/run-stop');
 
 const TODO_TOOL = path.join(__dirname, 'todopro-tool.js');

@@ -35,6 +35,8 @@ function resolveCore(name) {
 
 const todoStore = require(resolveCore('todo-store'));
 const sessionState = require(resolveCore('session-state'));
+const { setPlatform } = require(resolveCore('paths'));
+setPlatform('hana');
 const { runStop } = require(resolveCore('run-stop'));
 const { runPostToolUse } = require(resolveCore('run-post-tool-use'));
 

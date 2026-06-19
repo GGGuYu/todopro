@@ -4,6 +4,8 @@
 // 仅用 Node 内置模块(零依赖)。
 
 const { readStdin } = require('./util');
+const { setPlatform } = require('../../core/paths');
+setPlatform('codex');
 const sessionState = require('../../core/session-state');
 
 function main() {

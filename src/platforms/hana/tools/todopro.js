@@ -20,6 +20,10 @@ function resolveCore(name) {
   throw new Error('TodoPro core module not found: ' + name);
 }
 
+// 平台隔离:核心模块读写 .todopro/hana/ 子目录
+const { setPlatform } = require(resolveCore('paths'));
+setPlatform('hana');
+
 // 工具工厂:接收 pi,注册 TodoPro 工具。
 module.exports = function registerTodoProTool(pi) {
   pi.registerTool({
