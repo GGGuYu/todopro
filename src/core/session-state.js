@@ -14,7 +14,6 @@
 
 const fs = require('fs');
 const { paths } = require('./paths');
-
 const NUDGE_LIMIT = 2;          // 循环出口 nudge 最多 2 次,第 3 次交还用户
 const REVIEW_NUDGE_LIMIT = 2;   // review nudge 最多 2 次
 const REVIEW_HARD_LIMIT = 3;    // 单会话 review 硬上限
@@ -67,12 +66,23 @@ function markTodoWritten(dir) {
 }
 
 // SubagentStop:置本轮子 agent 标志。
-// P1-2:若 review_pending=true,同时置 review_subagent_fired(认为是 review 子 agent)。
+// P1-2 + 残留修复:若 review_pending=true,还需检查 requirement-summary.md 是否存在,
+//   存在才置 review_subagent_fired(认为主 agent 走了 review 流程:先写需求总结再起子 agent)。
+//   没写 summary 就起子 agent(跳步/探索)→ 不算 review,继续 nudge。
+//   这比"任何子 agent 都算"更可靠:review 流程要求先写 requirement-summary.md,
+//   主 agent 若没写就起子 agent,显然不是在跑 review。
 function markSubagentFired(dir) {
   const s = ensure(dir);
   s.subagent_fired_this_round = true;
   if (s.review_pending) {
-    s.review_subagent_fired = true;
+    // 检查 requirement-summary.md 是否存在(P1-2 残留真修复)
+    const p = paths(dir);
+    let summaryExists = false;
+    try { fs.accessSync(p.requirementSummary); summaryExists = true; } catch (e) { /* 不存在 */ }
+    if (summaryExists) {
+      s.review_subagent_fired = true;
+    }
+    // 若 summary 不存在,不置 review_subagent_fired——不算 review 完成
   }
   write(dir, s);
   return s;

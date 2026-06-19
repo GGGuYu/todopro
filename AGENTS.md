@@ -155,10 +155,9 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
       "updated_at": "ISO8601" }   // 钩子回填,模型不用管
   ],
   "session": {
-    "status": "active" | "paused" | "abandoned" | "completed",
-    "review_done": false,
-    "nudge_count": 0,
-    "review_nudge_count": 0
+    "status": "active" | "paused" | "abandoned" | "completed"
+    // P1-H6:计数字段(nudge_count/review_nudge_count/review_done)不在此,
+    //       由独立的 session-state.json 维护。todo.json.session 只留 status。
   }
 }
 ```
@@ -543,7 +542,9 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 
 11. **Hana 无等价行为测试**(P3-5 已部分修):tests/hana-plugin.test.js 用 mock pi 真实 require extensions/index.js,验证 registerTool 被调、handler 跑通 todos/action 出口。但这是 mock,真实 Pi 运行时的行为(事件触发时机、sendUserMessage 续跑)仍需实机验证。cross-platform.test.js 12.2 只验证 Claude Code 与 Codex 决策等价。所谓"三平台一致性"实际验证了两平台端到端 + Hana 的 mock 测试。
 
-12. **review 子 agent 用途限制**(P1-2 残留):review 引导后(review_pending=true),起的任何子 agent 都算 review 完成——钩子无法区分子 agent 是 review 还是探索。靠 reviewGuide 提示词约束"本轮只起 review 子 agent"+ review 熔断兜底。tests/real-path.test.js R10 记录此限制。这是设计层面的固有限制,不要试图在钩子层做用途区分。
+12. **review 子 agent 用途区分**(P1-2 残留已缓解):review 引导后(review_pending=true),起的子 agent **且 requirement-summary.md 已存在**才算 review 完成(SubagentStop 检查)。没写需求总结就起子 agent(跳步/探索)→ 不算,继续 nudge。这比"任何子 agent 都算"可靠:review 流程要求先写 requirement-summary.md。但仍有边角(写了 summary 后起探索子 agent 仍会被算),靠 reviewGuide 提示词约束"本轮只起 review 子 agent"+ 熔断兜底。tests/real-path.test.js R10/R10b 记录。
+
+13. **isTodoProCall 正则局限**(N3):推进检测靠正则 `/node\s+.*?todopro-tool\.js/` 识别 shell 命令。优先防漏判(路径含空格→机制静默失效,后果严重),代价是 echo 文档字面串可能误判(true,概率低+熔断兜底)。正则解析 shell 命令固有不可靠,边角场景靠熔断兜底。
 
 ---
 
@@ -557,8 +558,8 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 | 假设 Claude Code/Codex 有 "TodoPro" 注册工具 | ❌ | 没有。模型靠 Bash 调脚本(决策 13)。matcher 必须是 Bash/shell |
 | 把 PostToolUse matcher 改回 "TodoPro" | ❌ | 永远不触发。必须是 Bash/shell + 命令内容识别 |
 | 测试绕过"模型怎么调到工具"这层 | ❌ | 必须走真实路径(tests/real-path.test.js)。直接调脚本会假绿 |
-| 把任何子 agent 结束当 review 完成 | ❌ | P1-2 修复:只有 review_pending=true 时起的子 agent 才算 review。用 review_subagent_fired 而非 subagent_fired_this_round 判断 |
-| 全量替换静默删除漏带项不给提示 | ❌ | P1-4 修复:oldTodos>newTodos 时返回 warning。模型需看到才能确认是否有意 |
+| 把任何子 agent 结束当 review 完成 | ❌ | 钩子层无法区分子 agent 用途。当前:review_pending 窗口内起子 agent + requirement-summary.md 存在才算 review(P1-2 残留修复)。仍有边角(见限制 12),靠提示词+熔断兜底 |
+| 全量替换静默删除漏带项不给提示 | ❌ | P1-4 修复:removedIds.length > 0 时返回 warning。模型需看到才能确认是否有意 |
 | 在 PostToolUse 对每个编辑注入建议 | ❌ | 违反原则 2(中间零干预)。只在边界点动手 |
 | 让 review 的 CRITICAL 必须修 | ❌ | 违反原则 4。全部先查实均可忽略,否则放大消耗 |
 | 加阻断分支但不配熔断 | ❌ | 违反原则 5。会卡死用户 |

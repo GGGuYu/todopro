@@ -46,10 +46,13 @@ function readInput() {
   throw new Error('no input (pass via stdin or argv)');
 }
 
-// runTool(dir?):处理一次 TodoPro 调用。
+// runTool(dir?, inputOverride?):处理一次 TodoPro 调用。
+// inputOverride:可选,Hana 等直接传参的平台用它跳过 stdin/argv 读取。
+//   Claude Code/Codex(经 Bash 调脚本)不传,走 readInput() 读 stdin。
+//   Hana(registerTool handler)直接传 args 对象,避免 readInput 卡在 stdin。
 // 返回 { ok, ... }。
-function runTool(dir) {
-  const input = readInput();
+function runTool(dir, inputOverride) {
+  const input = (inputOverride !== undefined) ? inputOverride : readInput();
 
   // 路径 A:明确出口(action)
   if (input && typeof input === 'object' && input.action) {

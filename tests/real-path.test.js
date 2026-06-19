@@ -148,7 +148,8 @@ test('R7 全完成经 Bash → review引导 → 子agent → 放行+清理', () 
   const out1 = stopHook(DIR);
   assert.ok(out1.includes('"decision":"block"'), '应阻断引导 review');
   assert.ok(out1.includes('独立 review'), '应含 review 引导');
-  // out1 阻断时置了 review_pending,所以接下来起的子 agent 算 review 子 agent
+  // out1 阻断时置了 review_pending。主 agent 按流程先写 requirement-summary.md 再起 review 子 agent
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
   subagentStop(DIR);
   const out2 = stopHook(DIR);
   assert.ok(!out2.includes('"decision":"block"'), 'review子agent后应放行');
@@ -177,19 +178,34 @@ test('R8 模型用内置 TodoWrite 不调我们的脚本 → 无 .todopro → St
   assert.ok(!fs.existsSync(process.env.TODOPRO_DIR), '不应创建 .todopro');
 });
 
-// R10:P1-2 残留——review 引导后起非 review 子 agent 会被误判(已知限制,靠提示词约束 + 熔断)
+// R10:P1-2 残留——review 引导后起子 agent 会被误判(已知限制,靠提示词约束 + 熔断)
 // 记录这个限制:review_pending=true 时任何子 agent 都算 review。reviewGuide 提示词约束"只起 review 子 agent"。
-test('R10 review引导后起子agent → 算review完成(已知限制,提示词已约束只起review子agent)', () => {
+test('R10 review引导后起子agent(已写requirement-summary)→ 算review完成', () => {
   fresh(DIR);
   modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'completed' }] });
   resetRound();
   const out1 = stopHook(DIR); // review-nudge → review_pending=true
   assert.ok(out1.includes('独立 review'), '应引导 review');
   assert.ok(out1.includes('只起这一个 review 子 agent'), '提示词应约束只起 review 子 agent');
-  // review_pending=true 时起子 agent → 算 review 完成(限制:无法区分用途)
+  // 主 agent 先写了 requirement-summary.md(review 流程正确)
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
+  // review_pending=true 时起子 agent → 算 review 完成
   subagentStop(DIR);
   const out2 = stopHook(DIR);
-  assert.ok(!out2.includes('"decision":"block"'), 'review_pending 时起子agent算 review 完成(已知限制)');
+  assert.ok(!out2.includes('"decision":"block"'), '写了summary+起子agent应算 review 完成');
+});
+
+// R10b:P1-2 残留真修复——review 引导后没写 requirement-summary 就起子 agent → 不算 review(仍阻断)
+// SubagentStop 检查 requirement-summary.md 存在才置 review_subagent_fired。
+test('R10b review引导后没写requirement-summary就起子agent → 不算review完成(仍阻断)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'completed' }] });
+  resetRound();
+  stopHook(DIR); // review-nudge → review_pending=true
+  // 主 agent 没写 requirement-summary.md 就起了子 agent(跳步/探索)
+  subagentStop(DIR);
+  const out = stopHook(DIR);
+  assert.ok(out.includes('"decision":"block"'), '没写summary就起子agent不应算review完成,应仍阻断');
 });
 
 // R11:H4 回归——字面字符串(grep todopro-tool.js)不应被误判为推进

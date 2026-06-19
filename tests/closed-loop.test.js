@@ -87,6 +87,8 @@ test('8.4 全完成 → review引导 → 起子agent → 放行+清理', () => {
   const out1 = hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' });
   assert.ok(out1 && out1.decision === 'block', '应 block 引导 review');
   assert.ok(out1.hookSpecificOutput.additionalContext.includes('独立 review'), '应含 review 引导');
+  // 主 agent 按流程先写 requirement-summary.md(P1-2 残留修复:SubagentStop 检查它存在才算 review)
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
   // 模拟起子 agent
   hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' });
   const out2 = hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' });
@@ -114,9 +116,10 @@ test('8.6 清理:删运行时文件', () => {
   // 放 review-subagent-prompt.md(预置)
   fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'review-subagent-prompt.md'), 'rules', 'utf8');
   execSync(`node -e "require('${ROOT.replace(/'/g,"'\\''")}/src/core/session-state').resetRoundFlags()"`, { env: process.env });
-  // P1-2:先触发 review-nudge(置 review_pending),再起子 agent(才算 review 子 agent)
+  // P1-2:先触发 review-nudge(置 review_pending),写 requirement-summary,再起子 agent(才算 review 子 agent)
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review-nudge1,置 review_pending
-  hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' }); // review_pending=true → review_subagent_fired
+  fs.writeFileSync(path.join(process.env.TODOPRO_DIR, 'requirement-summary.md'), '需求总结', 'utf8');
+  hook('subagent-stop.js', { cwd: DIR, hook_event_name: 'SubagentStop' }); // review_pending=true + summary存在 → review_subagent_fired
   hook('stop-hook.js', { cwd: DIR, hook_event_name: 'Stop' }); // review 完成+清理
   assert.strictEqual(todoExists(), false, 'todo.json 应删');
   assert.strictEqual(fs.existsSync(path.join(process.env.TODOPRO_DIR, 'review-subagent-prompt.md')), true, 'review-subagent-prompt 应保留');

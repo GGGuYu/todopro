@@ -1,10 +1,11 @@
 // src/platforms/hana/tools/todopro.js
 // HanaAgent 插件:TodoPro 工具定义(通过 Pi SDK registerTool 注册)。
 // 模型调用此工具实现全量替换 todo 或表达三个明确出口。
-// 复用共享 runTool 逻辑(与 Claude Code/Codex 的 Bash 调用走同一套核心)。
 //
-// 安装:由 init.js 拷贝到 ${HANA_HOME}/plugins/todopro/tools/todopro.js
-// 由 extensions/index.js 调用此模块注册工具(P0-H1 接线)。
+// P0-H1:由 extensions/index.js 调用此函数完成接线。
+// N1 修复:handler 不再平行实现逻辑,改一行委托共享 runTool(决策只有一份)。
+//   早期 handler 自己重写了 replace/generate/markTodoWritten/action 分支,与 runTool 漂移
+//   (产生了 paused 死代码 N2)。现在只做 I/O 翻译:args → runTool 输入,runTool 输出 → 返回。
 
 const path = require('path');
 
@@ -20,7 +21,6 @@ function resolveCore(name) {
 }
 
 // 工具工厂:接收 pi,注册 TodoPro 工具。
-// P0-H1:由 extensions/index.js 调用此函数完成接线。
 module.exports = function registerTodoProTool(pi) {
   pi.registerTool({
     name: 'TodoPro',
@@ -51,61 +51,15 @@ module.exports = function registerTodoProTool(pi) {
       // todos 和 action 二选一,都不 required(由 handler 校验)
       required: [],
     },
-    // P0-H2:handler 复用共享 runTool 逻辑,支持 todos 维护 + action 三出口。
-    // 与 Claude Code/Codex 的 Bash 调用走同一套核心(run-todopro-tool)。
+    // N1 修复:handler 一行委托共享 runTool,只做 I/O 翻译。
+    // args 可能是 {todos:[...]} 或 {action:"..."} 或 {todos:[...], action:undefined}。
+    // runTool 接受 inputOverride 跳过 stdin 读取。
     handler: async (args, context) => {
       try {
-        const todoStore = require(resolveCore('todo-store'));
-        const todoMd = require(resolveCore('todo-md-mirror'));
-        const sessionState = require(resolveCore('session-state'));
-        const { EXIT_ACTIONS, actionToSessionPatch } = require(resolveCore('run-todopro-tool'));
+        const { runTool } = require(resolveCore('run-todopro-tool'));
         const cwd = (context && context.cwd) || pi.cwd || process.cwd();
-
-        // 路径 A:明确出口(action)
-        if (args && args.action) {
-          const action = args.action;
-          if (!EXIT_ACTIONS.has(action)) {
-            return { ok: false, error: 'invalid action: ' + action };
-          }
-          const patch = actionToSessionPatch(action);
-          if (patch) {
-            const existing = todoStore.read(cwd);
-            if (!existing) return { ok: false, error: 'no active TodoPro session to ' + action };
-            const { data } = todoStore.replace(cwd, existing.todos, patch);
-            todoMd.generate(cwd, data);
-          }
-          sessionState.markTodoWritten(cwd);
-          return {
-            ok: true,
-            action,
-            note: action === 'pause' ? '会话已暂停,监护停止。再次用 {todos:[...]} 维护即恢复。'
-                : action === 'abandon' ? '会话已放弃,运行时文件将在退出时清理。'
-                : '本轮知情停顿,已放行;下轮继续监护。',
-          };
-        }
-
-        // 路径 B:维护出口(todos 全量替换)
-        const todos = args && args.todos;
-        if (!Array.isArray(todos)) {
-          return { ok: false, error: 'input must have {todos:[...]} or {action:"..."}' };
-        }
-        const { data, oldTodos, warning } = todoStore.replace(cwd, todos);
-        todoMd.generate(cwd, data);
-        sessionState.markTodoWritten(cwd);
-        // P0-H3:若会话之前是 paused,维护调用(传新 todos)自动恢复成 active
-        if (data.session.status === 'paused') {
-          const { data: d2 } = todoStore.replace(cwd, todos, { status: 'active' });
-          todoMd.generate(cwd, d2);
-        }
-        const result = {
-          ok: true,
-          oldTodos,
-          todos: data.todos,
-          session: data.session,
-          note: 'todo.md 镜像已更新。继续干活;全部完成后会触发独立 review。',
-        };
-        if (warning) result.warning = warning;
-        return result;
+        // 委托共享逻辑(Hana handler 不再平行实现,避免漂移)
+        return runTool(cwd, args);
       } catch (e) {
         return { ok: false, error: e && e.message || String(e) };
       }

@@ -13,16 +13,18 @@ const touchedFiles = require('./touched-files');
 //   1. 工具名直接叫 TodoPro(Hana 平台 registerTool 注册的真工具)
 //   2. shell/bash 命令里用 node 调用 todopro-tool.js(Claude Code/Codex 上模型经 shell 调脚本)
 //      不同平台命令字段名不同(command / cmd / args),尽力提取。
-// P1-H4 修复:正则收紧为 node\s+\S*todopro-tool\.js(要求 node 调用,不是字面出现)。
-//   避免 grep -r todopro-tool.js 之类的命令被误判为推进。
+// P1-H4 修复:正则要求 node 调用 todopro-tool.js,不是字面出现。
+//   N3 修复:放宽允许引号包裹的含空格路径(用户目录如 /Users/My Name/proj/)。
+//   正则 /node\s+.*?todopro-tool\.js/ 要求 node 命令后(任意字符,含空格/引号)出现 todopro-tool.js。
+//   代价:echo 'use node todopro-tool.js' 之类文档字面串会误判(true),但概率低且熔断兜底。
+//   优先防漏判(路径含空格→机制静默失效,后果严重)胜过防误判(多放行一次,熔断兜底)。
 function isTodoProCall(toolName, toolInput) {
   if (toolName && /^todopro$/i.test(toolName)) return true;
   if (toolName && /^(bash|shell)$/i.test(toolName) && toolInput) {
     const cmd = toolInput.command || toolInput.cmd ||
       (typeof toolInput.args === 'string' ? toolInput.args : '') ||
       (Array.isArray(toolInput.args) ? toolInput.args.join(' ') : '');
-    // 要求 node 命令调用 todopro-tool.js(中间可有路径/参数),不是 grep/cat 等字面包含
-    if (typeof cmd === 'string' && /node\s+\S*todopro-tool\.js/.test(cmd)) return true;
+    if (typeof cmd === 'string' && /node\s+.*?todopro-tool\.js/.test(cmd)) return true;
   }
   return false;
 }
