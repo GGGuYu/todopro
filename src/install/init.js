@@ -76,6 +76,7 @@ function copyDir(src, dest) {
     } else if (/\.(js|json|md)$/.test(entry.name)) {
       fs.copyFileSync(srcPath, destPath);
     }
+    // 当前所有源文件均匹配 .js/.json/.md；若将来新增 .toml/.yaml 等需扩展此正则。
   }
 }
 
@@ -494,7 +495,7 @@ function uninstallAll(platforms, dir, removeGlobal) {
 }
 
 // ─── 交互式多选提示(↑/↓ 空格 回车, 零依赖纯 Node) ───
-function multiSelectPrompt(options) {
+function multiSelectPrompt(options, action = '安装') {
   return new Promise((resolve) => {
     const stdin = process.stdin;
 
@@ -521,7 +522,7 @@ function multiSelectPrompt(options) {
       }
 
       let out = '';
-      out += '  \x1b[2m?\x1b[0m 请选择要安装的平台 (\x1b[2m↑/↓\x1b[0m 导航, \x1b[2m空格\x1b[0m 切换, \x1b[2m回车\x1b[0m 确认):\n';
+      out += `  \x1b[2m?\x1b[0m 请选择要${action}的平台 (\x1b[2m↑/↓\x1b[0m 导航, \x1b[2m空格\x1b[0m 切换, \x1b[2m回车\x1b[0m 确认):\n`;
       for (let i = 0; i < options.length; i++) {
         const isCur = i === current;
         const isSel = selected[i];
@@ -670,7 +671,7 @@ async function main() {
         + (detected.length ? detected.map(p => PLATFORM_LABELS[p]).join(', ') : '无')
         + ANSI.reset);
       console.log();
-      platforms = await multiSelectPrompt(allPlatforms);
+      platforms = await multiSelectPrompt(allPlatforms, '卸载');
       if (platforms.length === 0) {
         console.log('\n  已取消。');
         return;
@@ -679,11 +680,8 @@ async function main() {
       console.log('  ' + ANSI.yellow + '将卸载: ' + platforms.map(p => PLATFORM_LABELS[p]).join(', ') + ANSI.reset);
     }
 
-    // 执行卸载
-    // Bug 修复:只在全卸载(--platform all 或所有平台都选了)时才删全局。
-    // 单平台卸载(如只卸 codex)不该删全局,否则同时装的 Claude Code 会断。
-    const removeGlobal = platforms.length >= 3 ||
-      (platforms.includes('claude-code') && platforms.includes('codex') && platforms.includes('hana'));
+    // 执行卸载。只有全卸载(claude-code + codex + hana)才删全局目录。
+    const removeGlobal = platforms.length === 3;
     uninstallAll(platforms, args.dir, removeGlobal);
     return;
   }
