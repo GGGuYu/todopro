@@ -304,6 +304,7 @@ function multiSelectPrompt(options) {
     let renderCount = 0;
     let warningMsg = '';
     const BASE_ROWS = options.length + 2; // 标题 + 选项 + 脚注
+    let lastRows = 0; // P3 修复:记住上次输出的行数,cursorUp 用上次行数(不是当前),避免警告出现/消失时行数不一致导致残留
 
     function totalRows() {
       return BASE_ROWS + (warningMsg ? 1 : 0);
@@ -312,7 +313,11 @@ function multiSelectPrompt(options) {
     function render() {
       const rows = totalRows();
       if (renderCount > 0) {
-        process.stdout.write(ANSI.cursorUp(rows));
+        // P3:cursorUp 用上次实际输出的行数(lastRows),不是当前行数。
+        //   警告出现(5→6)或消失(6→5)时,当前 totalRows 与上次不一致,
+        //   用当前会多/少跳一行,导致残留。用 lastRows 精确回到上次输出起点。
+        process.stdout.write(ANSI.cursorUp(lastRows));
+        process.stdout.write('\r'); // 回到行首,确保覆盖
       }
 
       let out = '';
@@ -337,6 +342,7 @@ function multiSelectPrompt(options) {
       }
 
       process.stdout.write(out);
+      lastRows = rows; // 记住本次行数,供下次 cursorUp 用
       renderCount++;
     }
 

@@ -71,11 +71,12 @@ function reviewGuide(attempt) {
 }
 
 // ─── review 完成:确认 ───
+// P2 修复:review-completed 不立即 cleanup(P0-1),提示词不能说"已清理"。
 function reviewDoneAck() {
   return [
     '【TodoPro 监护】已完成本轮独立 review。本次需求监护结束,放行退出。',
     '',
-    '运行时文件已清理。下次开新需求重新用 TodoPro 建 todo 即可。',
+    '退出时将自动清理运行时文件。下次开新需求重新用 TodoPro 建 todo 即可。',
   ].join('\n');
 }
 
