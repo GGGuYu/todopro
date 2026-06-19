@@ -137,6 +137,9 @@ function installGlobal(root) {
   copyDir(path.join(root, 'src/platforms/codex'), path.join(GLOBAL_DIR, 'src/platforms/codex'));
   // 复制 src/platforms/hana/
   copyDir(path.join(root, 'src/platforms/hana'), path.join(GLOBAL_DIR, 'src/platforms/hana'));
+  // 复制 src/install/init.js(删掉仓库后仍需 --update / --uninstall)
+  fs.mkdirSync(path.join(GLOBAL_DIR, 'src/install'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'src/install/init.js'), path.join(GLOBAL_DIR, 'src/install/init.js'));
   // 复制 skills/todopro/
   copyDir(path.join(root, 'skills/todopro'), path.join(GLOBAL_DIR, 'skills/todopro'));
   // 复制 src/install/init.js 自身,删仓库后仍可 --update/--uninstall
