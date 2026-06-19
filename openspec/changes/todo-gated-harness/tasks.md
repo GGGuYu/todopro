@@ -21,15 +21,15 @@
 
 ## 4. 注入提示词模板(平台无关)
 
-- [ ] 4.1 编写四选一 nudge 提示词模板(说明本轮没推进 + 四个合法出口:维护/暂停/放弃/acknowledge_stall 及各自调用方式)
-- [ ] 4.2 编写熔断交还用户提示词模板(nudge≥2 / review 熔断 / review 硬上限 三种)
-- [ ] 4.3 编写 review 引导提示词模板(要求主 Agent 写详细需求总结到 requirement-summary.md 复写覆盖 + 用原生子 agent 机制起 review + 只给两个文件路径 + 子 agent 自读)
-- [ ] 4.4 预置 `skills/todopro/review-subagent-prompt.md`:子 agent 审查规则(CRITICAL/ISSUE/SUGGEST 分档定义、基本完成只提建议别钻牛角尖但 CRITICAL 必报、自读 requirement-summary/todo/touched-files/git diff、输出格式)
+- [x] 4.1 编写四选一 nudge 提示词模板(说明本轮没推进 + 四个合法出口:维护/暂停/放弃/acknowledge_stall 及各自调用方式)
+- [x] 4.2 编写熔断交还用户提示词模板(nudge≥2 / review 熔断 / review 硬上限 三种)
+- [x] 4.3 编写 review 引导提示词模板(要求主 Agent 写详细需求总结到 requirement-summary.md 复写覆盖 + 用原生子 agent 机制起 review + 只给两个文件路径 + 子 agent 自读)
+- [x] 4.4 预置 `skills/todopro/review-subagent-prompt.md`:子 agent 审查规则(CRITICAL/ISSUE/SUGGEST 分档定义、基本完成只提建议别钻牛角尖但 CRITICAL 必报、自读 requirement-summary/todo/touched-files/git diff、输出格式)
 
 ## 5. 清理逻辑(平台无关)
 
-- [ ] 5.1 实现 `src/core/cleanup.js`:放行退出时删除 todo.json/requirement-summary.md/touched-files.json/session-state.json,保留 review-subagent-prompt.md
-- [ ] 5.2 在 decide-stop 的"放行退出"分支挂上 do_cleanup 标志,由适配层在放行时调用
+- [x] 5.1 实现 `src/core/cleanup.js`:放行退出时删除 todo.json/requirement-summary.md/touched-files.json/session-state.json,保留 review-subagent-prompt.md
+- [x] 5.2 在 decide-stop 的"放行退出"分支挂上 do_cleanup 标志,由适配层在放行时调用
 
 ## 6. TodoPro SKILL.md
 
