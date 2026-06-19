@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// src/platforms/claude-code/todopro-tool.js
-// TodoPro 工具入口(Claude Code)。共享 runTool 逻辑。
+// src/platforms/codex/todopro-tool.js
+// TodoPro 工具入口(Codex)。与 Claude Code 入口相同(共享 runTool)。
+// Codex 上模型经 SKILL.md 引导用 shell 调用此脚本。
 // 用法:echo '<todos JSON>' | node todopro-tool.js  或  node todopro-tool.js '<todos JSON>'
 // 仅用 Node 内置模块(零依赖)。
 

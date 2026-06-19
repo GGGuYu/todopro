@@ -1,0 +1,85 @@
+// src/platforms/hana/extensions/index.js
+// HanaAgent full-access 插件:TodoPro 适配层。
+// 通过 Pi SDK extension 事件接入,复用同一份平台无关核心逻辑。
+//
+// 安装:由 init.js 拷贝到 ${HANA_HOME}/plugins/todopro/extensions/index.js
+// 需在 Hana 设置开启"允许全权插件"。
+//
+// Pi 事件 ↔ 我们的钩子映射:
+//   turn_end    ↔ Stop         (一轮结束,检测是否该阻断/续跑)
+//   tool_result ↔ PostToolUse  (TodoPro 工具→置推进;编辑类→记 touched-files)
+//   agent_end   ↔ SubagentStop (子 agent 结束→置 subagent_fired)
+//
+// 注入续跑:Pi 的 turn_end 不能"阻止停止",但可用 api.sendUserMessage(content, {deliverAs:"followUp"})
+//   主动发一条消息触发新 turn——等价于 Claude Code 的 block+additionalContext。
+//
+// 核心脚本路径:require 时用绝对路径指向 TodoPro 仓库的 src/core/。
+//   实际部署时核心脚本随插件一起放置(或软链),此处假设核心脚本在插件目录的 ../../../../src/core/。
+//   若路径不对,init.js 应调整。为稳健,用 try 多路径查找。
+
+const path = require('path');
+
+// 解析核心模块路径:优先插件内 bundled,其次 TodoPro 仓库源
+function resolveCore(name) {
+  const candidates = [
+    path.join(__dirname, '..', '..', 'core', name),                 // 插件内 bundled(推荐)
+    path.join(__dirname, '..', '..', '..', '..', 'src', 'core', name), // TodoPro 仓库源(开发态)
+  ];
+  for (const p of candidates) {
+    try { require.resolve(p); return p; } catch (e) { /* try next */ }
+  }
+  throw new Error('TodoPro core module not found: ' + name + ' (checked: ' + candidates.join(', ') + ')');
+}
+
+const todoStore = require(resolveCore('todo-store'));
+const sessionState = require(resolveCore('session-state'));
+const { runStop } = require(resolveCore('run-stop'));
+const { runPostToolUse } = require(resolveCore('run-post-tool-use'));
+
+// ExtensionFactory:Pi 加载插件时调用,参数为 ExtensionAPI
+module.exports = function (pi) {
+  const cwd = pi.cwd || process.cwd();
+
+  // ─── turn_end ↔ Stop ───
+  pi.on('turn_end', (event, context) => {
+    try {
+      const decision = runStop(cwd);
+      // 阻断+续跑:发一条 user message 触发新 turn(等价 block+additionalContext)
+      if (decision.action === 'block' && decision.injectText) {
+        pi.sendUserMessage(decision.injectText, { deliverAs: 'followUp' });
+      }
+      // 放行时的提示(交还用户/review完成)不续跑,可选写日志
+    } catch (e) {
+      // 钩子失败降级:不阻断
+      context.ui && context.ui.error && context.ui.error('TodoPro turn_end error: ' + (e.message || e));
+    }
+  });
+
+  // ─── tool_result ↔ PostToolUse ───
+  pi.on('tool_result', (event, context) => {
+    try {
+      const toolName = event.toolName || (event.tool && event.tool.name);
+      const toolInput = event.args || (event.tool && event.tool.input) || {};
+      runPostToolUse(cwd, toolName, toolInput);
+    } catch (e) {
+      // 降级
+    }
+  });
+
+  // ─── agent_end ↔ SubagentStop(子 agent 结束)───
+  // 注意:agent_end 在主 agent 结束时也触发。Pi 无单独的"子 agent 结束"事件,
+  // 需结合 context 判断是否在子 agent 内(若 context 有 agentType/isSubagent 标志)。
+  // 兜底:agent_end 时置 subagent_fired(若本轮有过任何子 agent 调用)。
+  // 此处为骨架,实际需根据 Pi 版本的事件字段调整。
+  pi.on('agent_end', (event, context) => {
+    try {
+      // 仅当确实是子 agent 结束时才置标志(避免主 agent 结束误置)
+      // Pi 的 agent_end event.messages 可判断,但更可靠的是看是否有 agentType
+      if (context && context.agentType) {
+        sessionState.markSubagentFired(cwd);
+      }
+    } catch (e) {
+      // 降级
+    }
+  });
+};

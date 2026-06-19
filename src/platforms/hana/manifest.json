@@ -1,0 +1,8 @@
+{
+  "id": "todopro",
+  "name": "TodoPro",
+  "version": "0.1.0",
+  "description": "Todo-gated agent harness: enhanced todo tool with loop-exit guard (prevents forgetting to maintain todos) and independent completion review. Cross-platform (Claude Code / Codex / Hana). Zero npm dependencies.",
+  "trust": "full-access",
+  "author": "TodoPro"
+}

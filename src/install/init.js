@@ -176,12 +176,12 @@ function installCodex(dir) {
            path.join(todoproDir, 'review-subagent-prompt.md'));
 
   console.log();
-  warn('Codex 适配层(组9)尚未实现,stop-hook.js 等脚本待编写。');
-  ok('配置已就位,待适配层完成后即可生效。');
+  ok('Codex 安装完成。');
   info('请重启 Codex 以加载配置。');
+  info('之后模型在做多步/多文件任务时可自主调用 TodoPro(见 SKILL.md)。');
 }
 
-// ─── Hana 安装(骨架,组10 完善后激活)───
+// ─── Hana 安装 ───
 function installHana(dir) {
   info('安装到 HanaAgent...');
   const root = todoproRoot();
@@ -189,25 +189,40 @@ function installHana(dir) {
   const pluginsDir = path.join(hanaHome, 'plugins');
   const pluginDir = path.join(pluginsDir, 'todopro');
 
-  // full-access 插件结构:manifest.json + extensions/ + tools/ + skills/
+  // full-access 插件结构:manifest.json + extensions/ + tools/ + skills/ + core/(bundled)
   fs.mkdirSync(path.join(pluginDir, 'extensions'), { recursive: true });
   fs.mkdirSync(path.join(pluginDir, 'tools'), { recursive: true });
   fs.mkdirSync(path.join(pluginDir, 'skills', 'todopro'), { recursive: true });
+  fs.mkdirSync(path.join(pluginDir, 'core'), { recursive: true });
 
-  // manifest.json(声明 full-access)
-  const manifest = {
-    id: 'todopro',
-    name: 'TodoPro',
-    version: '0.1.0',
-    description: 'Todo-gated agent harness: enhanced todo with loop-exit guard and completion review.',
-    trust: 'full-access',
-  };
-  fs.writeFileSync(path.join(pluginDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  // manifest.json
+  copyFile(path.join(root, 'src/platforms/hana/manifest.json'),
+           path.join(pluginDir, 'manifest.json'));
   ok('manifest.json 已创建(full-access)');
 
+  // extensions/index.js(Pi 事件接入)
+  copyFile(path.join(root, 'src/platforms/hana/extensions/index.js'),
+           path.join(pluginDir, 'extensions/index.js'));
+  ok('extensions/index.js 已安装');
+
+  // tools/todopro.js(TodoPro 工具注册)
+  copyFile(path.join(root, 'src/platforms/hana/tools/todopro.js'),
+           path.join(pluginDir, 'tools/todopro.js'));
+  ok('tools/todopro.js 已安装');
+
   // SKILL.md
-  copyFile(path.join(root, 'skills/todopro/SKILL.md'), path.join(pluginDir, 'skills/todopro/SKILL.md'));
+  copyFile(path.join(root, 'skills/todopro/SKILL.md'),
+           path.join(pluginDir, 'skills/todopro/SKILL.md'));
   ok('SKILL.md 已放到插件 skills/');
+
+  // 核心脚本 bundle 到插件 core/(extensions/tools 通过 resolveCore 找这里)
+  const coreFiles = ['paths.js', 'todo-store.js', 'todo-md-mirror.js', 'session-state.js',
+                     'touched-files.js', 'git-diff.js', 'decide-stop.js', 'prompts.js',
+                     'cleanup.js', 'run-stop.js', 'run-post-tool-use.js', 'run-todopro-tool.js'];
+  for (const f of coreFiles) {
+    copyFile(path.join(root, 'src/core', f), path.join(pluginDir, 'core', f));
+  }
+  ok('核心脚本(' + coreFiles.length + ' 个)已 bundle 到插件 core/');
 
   // 预置 review-subagent-prompt.md
   const todoproDir = path.join(dir, '.todopro');
@@ -216,9 +231,9 @@ function installHana(dir) {
            path.join(todoproDir, 'review-subagent-prompt.md'));
 
   console.log();
-  warn('Hana 适配层(组10)尚未实现,extensions/*.js 待编写。');
-  ok('插件骨架已就位,待适配层完成后即可生效。');
+  ok('Hana 安装完成。');
   info('需在 Hana 设置 → 插件页面开启"允许全权插件"开关,然后重载。');
+  info('之后模型在做多步/多文件任务时可自主调用 TodoPro(见 SKILL.md)。');
 }
 
 function copyFile(src, dest) {

@@ -56,16 +56,16 @@
 
 ## 9. Codex 适配层
 
-- [ ] 9.1 实现 `src/platforms/codex/stop-hook.js`:Codex `stop` 事件 → 归一化 → decide-stop → `should_block`+`block_reason`+`continuation_fragments`
-- [ ] 9.2 实现 Codex post_tool_use 适配(TodoPro matcher 置标志、编辑类 matcher 记 touched-files)与 subagent_stop 适配
-- [ ] 9.3 实现 Codex 的 TodoPro 工具入口(Codex 自定义工具机制)
-- [ ] 9.4 编写 `config.toml` 的 `[hooks]` 配置片段
+- [x] 9.1 实现 `src/platforms/codex/stop-hook.js`:Codex `stop` 事件 → 归一化 → decide-stop → `should_block`+`block_reason`+`continuation_fragments`
+- [x] 9.2 实现 Codex post_tool_use 适配(TodoPro matcher 置标志、编辑类 matcher 记 touched-files)与 subagent_stop 适配
+- [x] 9.3 实现 Codex 的 TodoPro 工具入口(Codex 自定义工具机制)
+- [x] 9.4 编写 `config.toml` 的 `[hooks]` 配置片段
 
 ## 10. Hana(Pi)适配层
 
-- [ ] 10.1 实现 Hana full-access 插件 `extensions/`:turn_end/tool_call/tool_result/agent_end 事件接入 → 归一化 → decide-stop → context.afterUser 注入
-- [ ] 10.2 实现 Hana 的 TodoPro 工具入口(restricted 插件 `tools/`)
-- [ ] 10.3 复用同一份核心脚本(验证 sampleText 路径与原生子 agent 机制在 Pi 上可用)
+- [x] 10.1 实现 Hana full-access 插件 `extensions/`:turn_end/tool_call/tool_result/agent_end 事件接入 → 归一化 → decide-stop → context.afterUser 注入
+- [x] 10.2 实现 Hana 的 TodoPro 工具入口(restricted 插件 `tools/`)
+- [x] 10.3 复用同一份核心脚本(验证 sampleText 路径与原生子 agent 机制在 Pi 上可用)
 
 ## 11. init 引导程序
 
@@ -78,6 +78,6 @@
 
 ## 12. 跨平台一致性验证
 
-- [ ] 12.1 验证核心脚本三平台共用同一份(无平台特定分支)
-- [ ] 12.2 验证三平台归一化事件与反归一化输出契约一致(同一决策在三平台产生等价行为)
-- [ ] 12.3 验证三平台均零 npm 依赖(纯 node 内置模块运行)
+- [x] 12.1 验证核心脚本三平台共用同一份(无平台特定分支)
+- [x] 12.2 验证三平台归一化事件与反归一化输出契约一致(同一决策在三平台产生等价行为)
+- [x] 12.3 验证三平台均零 npm 依赖(纯 node 内置模块运行)
