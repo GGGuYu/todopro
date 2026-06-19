@@ -13,4 +13,3 @@
 | `session-state.json` | 钩子维护 | 会话级状态(计数、轮标志、review_done) | 删 |
 
 > 此文件由 `init` 自动生成,不入库(.gitignore 忽略 .todopro/* 但保留 README)。
-> 仓库中保留此文件是为了让 clone 后直接可读;init 会覆盖更新。

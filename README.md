@@ -124,6 +124,15 @@ node src/install/init.js --platform claude-code   # 单平台
 node src/install/init.js --platform all            # 全部平台
 ```
 
+### 卸载
+
+```bash
+node src/install/init.js --uninstall                      # 交互式选择卸载平台
+node src/install/init.js --uninstall --platform claude-code # 精确删除指定平台
+```
+
+卸载会精确清楚:全局安装目录、各平台的 hook 配置条目(保留用户其他配置)、SKILL.md、预置文件。重启平台后完全恢复裸跑状态。
+
 安装后**重启/重载**你的 Agent 平台以使 hooks 生效。hooks 指向全局 `~/.agents/skills/todopro/`,**在任何项目目录都生效**,不依赖仓库位置。
 
 ### 更新

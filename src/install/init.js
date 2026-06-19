@@ -47,11 +47,12 @@ const ANSI = {
 const GLOBAL_DIR = path.join(os.homedir(), '.agents', 'skills', 'todopro');
 
 function parseArgs(argv) {
-  const args = { platform: null, dir: process.cwd(), update: false };
+  const args = { platform: null, dir: process.cwd(), update: false, uninstall: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--platform' && argv[i + 1]) { args.platform = argv[++i]; }
     else if (argv[i] === '--dir' && argv[i + 1]) { args.dir = argv[++i]; }
     else if (argv[i] === '--update') { args.update = true; }
+    else if (argv[i] === '--uninstall') { args.uninstall = true; }
     else if (argv[i] === '--help' || argv[i] === '-h') { args.help = true; }
   }
   return args;
@@ -354,6 +355,141 @@ function installHana(dir, globalDir) {
   info('插件通过软链引用全局 ' + GLOBAL_DIR + '。');
 }
 
+// ─── 卸载:精确清理各平台的 TodoPro 痕迹(保留用户其他配置)───
+
+// 递归删除目录(空目录也删)
+function removeDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true }); return true; }
+  catch (e) { return false; }
+}
+
+function uninstallClaudeCode(dir) {
+  info('卸载 Claude Code...');
+  const claudeDir = path.join(dir, '.claude');
+  let cleaned = 0;
+
+  // 1. 从 settings.json 精确删除 TodoPro hook 条目(command 含 'todopro')
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (settings.hooks) {
+        for (const evt of Object.keys(settings.hooks)) {
+          const before = settings.hooks[evt].length;
+          // 过滤掉 command 含 'todopro' 的条目
+          settings.hooks[evt] = settings.hooks[evt].filter(e =>
+            !(e.hooks && e.hooks.some(h => (h.command || '').includes('todopro')))
+          );
+          cleaned += before - settings.hooks[evt].length;
+          // 若该事件类型删空了,删掉空数组(必须在 cleaned += 之后,否则 settings.hooks[evt] 变 undefined)
+          if (settings.hooks[evt].length === 0) delete settings.hooks[evt];
+        }
+        if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+        ok('settings.json 已清理 TodoPro hooks(删除 ' + cleaned + ' 条,保留其他配置)');
+      }
+    } catch (e) { warn('settings.json 解析失败,跳过 hook 清理: ' + e.message); }
+  }
+
+  // 2. 删 .claude/skills/todopro/(SKILL.md)
+  const skillDir = path.join(claudeDir, 'skills', 'todopro');
+  if (fs.existsSync(skillDir)) { removeDir(skillDir); ok('已删 ' + path.relative(dir, skillDir)); }
+
+  // 3. 删 .todopro/(预置文件 + 运行时文件)
+  const todoproDir = path.join(dir, '.todopro');
+  if (fs.existsSync(todoproDir)) { removeDir(todoproDir); ok('已删 ' + path.relative(dir, todoproDir)); }
+
+  ok('Claude Code 卸载完成');
+}
+
+function uninstallCodex(dir) {
+  info('卸载 Codex...');
+  let cleaned = false;
+
+  // 1. 从 config.toml 精确删除 # --- TodoPro hooks --- 到 # --- end TodoPro hooks --- 段
+  const configPath = fs.existsSync(path.join(dir, 'config.toml'))
+    ? path.join(dir, 'config.toml')
+    : path.join(os.homedir(), '.codex', 'config.toml');
+  if (fs.existsSync(configPath)) {
+    let content = fs.readFileSync(configPath, 'utf8');
+    const startMarker = '# --- TodoPro hooks';
+    const endMarker = '# --- end TodoPro hooks ---';
+    const startIdx = content.indexOf(startMarker);
+    if (startIdx >= 0) {
+      const endIdx = content.indexOf(endMarker, startIdx);
+      if (endIdx >= 0) {
+        // 删从 startMarker 前的空行到 endMarker 后的换行
+        let removeStart = startIdx;
+        // 往前吃掉一个空行(如果有)
+        if (removeStart > 0 && content[removeStart - 1] === '\n') removeStart--;
+        if (removeStart > 0 && content[removeStart - 1] === '\n') removeStart--;
+        let removeEnd = endIdx + endMarker.length;
+        if (content[removeEnd] === '\n') removeEnd++;
+        content = content.slice(0, removeStart) + content.slice(removeEnd);
+        fs.writeFileSync(configPath, content, 'utf8');
+        ok('config.toml 已清理 TodoPro hooks 段(保留其他配置)');
+        cleaned = true;
+      }
+    }
+    if (!cleaned) { info('config.toml 未找到 TodoPro hooks 段,跳过'); }
+  }
+
+  // 2. 删 ~/.codex/skills/todopro/
+  const skillDir = path.join(os.homedir(), '.codex', 'skills', 'todopro');
+  if (fs.existsSync(skillDir)) { removeDir(skillDir); ok('已删 ' + skillDir); }
+
+  // 3. 删 .todopro/
+  const todoproDir = path.join(dir, '.todopro');
+  if (fs.existsSync(todoproDir)) { removeDir(todoproDir); ok('已删 ' + path.relative(dir, todoproDir)); }
+
+  ok('Codex 卸载完成');
+}
+
+function uninstallHana(dir) {
+  info('卸载 HanaAgent...');
+  const hanaHome = process.env.HANA_HOME || path.join(os.homedir(), '.openhanako');
+  const pluginDir = path.join(hanaHome, 'plugins', 'todopro');
+
+  // 1. 删整个插件目录(软链+manifest+skills)
+  if (fs.existsSync(pluginDir)) { removeDir(pluginDir); ok('已删插件 ' + pluginDir); }
+  else { info('未找到 Hana 插件目录,跳过'); }
+
+  // 2. 删 .todopro/
+  const todoproDir = path.join(dir, '.todopro');
+  if (fs.existsSync(todoproDir)) { removeDir(todoproDir); ok('已删 ' + path.relative(dir, todoproDir)); }
+
+  ok('Hana 卸载完成');
+}
+
+function uninstallGlobal() {
+  info('卸载全局安装...');
+  if (fs.existsSync(GLOBAL_DIR)) { removeDir(GLOBAL_DIR); ok('已删全局 ' + GLOBAL_DIR); }
+  else { info('未找到全局安装目录,跳过'); }
+}
+
+function uninstallAll(platforms, dir, removeGlobal) {
+  let count = 0;
+  for (const p of platforms) {
+    count++;
+    console.log();
+    info(`[${count}/${platforms.length}] 卸载 ${PLATFORM_LABELS[p] || p}...`);
+    switch (p) {
+      case 'claude-code': uninstallClaudeCode(dir); break;
+      case 'codex': uninstallCodex(dir); break;
+      case 'hana': uninstallHana(dir); break;
+      default: warn('未知平台:' + p + ',跳过');
+    }
+  }
+  // 最后删全局(所有平台都卸了才删)
+  if (removeGlobal) {
+    console.log();
+    uninstallGlobal();
+  }
+  console.log();
+  ok(`卸载完成 — 已清理 ${count} 个平台${removeGlobal ? ' + 全局安装' : ''}。`);
+  info('请重启对应平台以使卸载生效。');
+}
+
 // ─── 交互式多选提示(↑/↓ 空格 回车, 零依赖纯 Node) ───
 function multiSelectPrompt(options) {
   return new Promise((resolve) => {
@@ -477,10 +613,12 @@ async function main() {
 
   if (args.help) {
     console.log('用法:');
-    console.log('  node src/install/init.js                       # 交互式选择平台');
+    console.log('  node src/install/init.js                       # 交互式选择平台(安装)');
     console.log('  node src/install/init.js --platform <name>     # 静默安装指定平台');
     console.log('  node src/install/init.js --platform all        # 安装全部平台');
     console.log('  node src/install/init.js --update              # 只刷新全局安装(不重配 hook)');
+    console.log('  node src/install/init.js --uninstall           # 交互式选择平台(卸载)');
+    console.log('  node src/install/init.js --uninstall --platform claude-code  # 静默卸载指定平台');
     console.log('  node src/install/init.js --platform <name> --dir <path>  # 指定项目目录');
     console.log('');
     console.log('可用平台:claude-code | codex | hana');
@@ -498,6 +636,48 @@ async function main() {
     info('--update:只刷新全局安装...');
     installGlobal(root);
     ok('全局安装已更新。hooks 和 SKILL.md 不变(如需更新重跑 init --platform)');
+    return;
+  }
+
+  // --uninstall:卸载
+  if (args.uninstall) {
+    let platforms = [];
+
+    if (args.platform) {
+      if (args.platform === 'all') {
+        platforms = ['claude-code', 'codex', 'hana'];
+      } else {
+        const valid = ['claude-code', 'codex', 'hana'];
+        if (!valid.includes(args.platform)) {
+          err('未知平台:' + args.platform);
+          process.exit(1);
+        }
+        platforms = [args.platform];
+      }
+      info('指定卸载平台:' + platforms.join(', '));
+    } else {
+      // 交互式:检测已装平台 → 弹出多选
+      const detected = detectPlatforms(args.dir);
+      const allPlatforms = [
+        { name: 'claude-code', label: 'Claude Code', detected: detected.includes('claude-code') },
+        { name: 'codex',       label: 'Codex',        detected: detected.includes('codex') },
+        { name: 'hana',        label: 'HanaAgent',    detected: detected.includes('hana') },
+      ];
+      console.log('  ' + ANSI.dim + '已检测到安装位置:'
+        + (detected.length ? detected.map(p => PLATFORM_LABELS[p]).join(', ') : '无')
+        + ANSI.reset);
+      console.log();
+      platforms = await multiSelectPrompt(allPlatforms);
+      if (platforms.length === 0) {
+        console.log('\n  已取消。');
+        return;
+      }
+      process.stdout.write('\n');
+      console.log('  ' + ANSI.yellow + '将卸载: ' + platforms.map(p => PLATFORM_LABELS[p]).join(', ') + ANSI.reset);
+    }
+
+    // 执行卸载
+    uninstallAll(platforms, args.dir, true);
     return;
   }
 

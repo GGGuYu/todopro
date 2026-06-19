@@ -1,2 +1,46 @@
-{}
-
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/guyu/.agents/skills/todopro/src/platforms/claude-code/stop-hook.js\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/guyu/.agents/skills/todopro/src/platforms/claude-code/post-tool-use.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/guyu/.agents/skills/todopro/src/platforms/claude-code/post-tool-use.js\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/guyu/.agents/skills/todopro/src/platforms/claude-code/subagent-stop.js\""
+          }
+        ]
+      }
+    ]
+  }
+}
