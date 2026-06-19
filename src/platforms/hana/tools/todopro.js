@@ -7,10 +7,13 @@
 
 const path = require('path');
 
+// 解析核心模块路径:优先插件内 bundled,其次 TodoPro 仓库源(开发态)
+// 部署后:tools/todopro.js 的 __dirname = plugins/todopro/tools/
+//   .. → plugins/todopro/,core → plugins/todopro/core/ ✓
 function resolveCore(name) {
   const candidates = [
-    path.join(__dirname, '..', '..', 'core', name),
-    path.join(__dirname, '..', '..', '..', '..', 'src', 'core', name),
+    path.join(__dirname, '..', 'core', name),                     // 插件内 bundled(部署态)
+    path.join(__dirname, '..', '..', '..', '..', 'src', 'core', name), // TodoPro 仓库源(开发态)
   ];
   for (const p of candidates) {
     try { require.resolve(p); return p; } catch (e) { /* try next */ }

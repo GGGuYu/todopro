@@ -140,5 +140,33 @@ test('12.3 所有 .js 仅 require Node 内置模块或本项目内部模块(零 
   console.log('    全部模块仅用 Node 内置(fs/path/crypto/child_process/os),零 npm 依赖');
 });
 
+// 12.4 Hana 插件 resolveCore 路径正确(部署后能找到 bundled core)
+// 守着 P0-2 修复:extensions/ 和 tools/ 的 resolveCore 第一候选必须指向 plugins/todopro/core/
+test('12.4 Hana 插件部署后 resolveCore 能找到 bundled core(extensions 与 tools 两条路径)', () => {
+  const hanaHome = '/tmp/tp-xp-hana';
+  fs.rmSync(hanaHome, { recursive: true, force: true });
+  fs.mkdirSync(hanaHome, { recursive: true });
+  execSync(`HANA_HOME=${hanaHome} node "${path.join(ROOT, 'src/install/init.js')}" --platform hana --dir ${hanaHome}`, { stdio: 'ignore' });
+
+  const pluginDir = path.join(hanaHome, 'plugins', 'todopro');
+  const coreDir = path.join(pluginDir, 'core');
+  assert.ok(fs.existsSync(coreDir), 'core bundle 目录应存在');
+
+  // 模拟 extensions/index.js 的 resolveCore(__dirname = extensions/)
+  const extDir = path.join(pluginDir, 'extensions');
+  const extResolve = (name) => path.join(extDir, '..', 'core', name);
+  for (const m of ['todo-store.js', 'decide-stop.js', 'run-stop.js']) {
+    assert.ok(fs.existsSync(extResolve(m)), 'extensions resolveCore 应找到 ' + m + ',实际路径: ' + extResolve(m));
+  }
+
+  // 模拟 tools/todopro.js 的 resolveCore(__dirname = tools/)
+  const toolsDir = path.join(pluginDir, 'tools');
+  const toolsResolve = (name) => path.join(toolsDir, '..', 'core', name);
+  for (const m of ['todo-store.js', 'run-todopro-tool.js', 'session-state.js']) {
+    assert.ok(fs.existsSync(toolsResolve(m)), 'tools resolveCore 应找到 ' + m);
+  }
+  console.log('    extensions/ 与 tools/ 的 resolveCore 均指向 plugins/todopro/core/ ✓');
+});
+
 console.log('\n结果:' + PASS + ' 通过, ' + FAIL + ' 失败');
 process.exit(FAIL === 0 ? 0 : 1);

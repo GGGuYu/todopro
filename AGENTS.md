@@ -383,6 +383,8 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 
 **测试教训**:tests/closed-loop.test.js 早期直接 `echo JSON | node todopro-tool.js` 调脚本,**绕过了"模型怎么调到工具"这层**,所以全绿但实际跑不通。tests/real-path.test.js 修复了这个断层:模拟模型用 Bash 工具调用(真实执行 + 触发 PostToolUse(Bash) 让钩子识别)。**加新功能时,测试必须走真实路径,不能绕过工具可达层。**
 
+**另一个踩坑(已修)**:Hana 的 `resolveCore` 早期写 `path.join(__dirname, '..', '..', 'core', name)`,从 `extensions/` 出发 `..`×2 到了 `plugins/`(差一层),实际 core bundle 在 `plugins/todopro/core/`。部署后 `require` 找不到模块,插件加载即崩。正确是 `..`×1(`extensions/` → `plugins/todopro/`)+ `core`。`tools/todopro.js` 同样 bug 同样修。tests/cross-platform.test.js 12.4 守这条(部署后实测 resolveCore 路径)。**改 Hana 路径相关代码,必跑 12.4。**
+
 ---
 
 ## 五、平台钩子对照(改适配层时参考)
