@@ -594,7 +594,7 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 ### 安装
 
 ```bash
-git clone <repo>
+git clone https://github.com/GGGuYu/todopro.git
 node src/install/init.js
 # ↑ 交互式选择平台(↑/↓导航,空格切换,回车确认),自动检测并预勾选
 # 也可静默指定: node src/install/init.js --platform claude-code

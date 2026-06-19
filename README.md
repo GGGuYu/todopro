@@ -107,7 +107,7 @@ When the session finally exits (review done or circuit-broken), TodoPro deletes 
 ### 一行安装
 
 ```bash
-git clone <repo-url> todopro && cd todopro
+git clone https://github.com/GGGuYu/todopro.git todopro && cd todopro
 node src/install/init.js
 ```
 
