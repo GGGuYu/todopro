@@ -11,16 +11,18 @@ const touchedFiles = require('./touched-files');
 // 判断一个工具调用是否为"调用 TodoPro"(推进)。
 // 两类:
 //   1. 工具名直接叫 TodoPro(Hana 平台 registerTool 注册的真工具)
-//   2. shell/bash 命令里包含 todopro-tool(Claude Code/Codex 上模型经 shell 调脚本)
+//   2. shell/bash 命令里用 node 调用 todopro-tool.js(Claude Code/Codex 上模型经 shell 调脚本)
 //      不同平台命令字段名不同(command / cmd / args),尽力提取。
+// P1-H4 修复:正则收紧为 node\s+\S*todopro-tool\.js(要求 node 调用,不是字面出现)。
+//   避免 grep -r todopro-tool.js 之类的命令被误判为推进。
 function isTodoProCall(toolName, toolInput) {
   if (toolName && /^todopro$/i.test(toolName)) return true;
   if (toolName && /^(bash|shell)$/i.test(toolName) && toolInput) {
-    // 命令可能在 command / cmd 字段,或 Codex 的 args 里
     const cmd = toolInput.command || toolInput.cmd ||
       (typeof toolInput.args === 'string' ? toolInput.args : '') ||
       (Array.isArray(toolInput.args) ? toolInput.args.join(' ') : '');
-    if (typeof cmd === 'string' && /todopro-tool\.js/.test(cmd)) return true;
+    // 要求 node 命令调用 todopro-tool.js(中间可有路径/参数),不是 grep/cat 等字面包含
+    if (typeof cmd === 'string' && /node\s+\S*todopro-tool\.js/.test(cmd)) return true;
   }
   return false;
 }

@@ -30,6 +30,8 @@ function isEditTool(toolName) {
 
 // 从工具调用里提取涉及的文件路径。不同工具参数名不同,尽力提取。
 // input: 工具的输入对象(归一化后)
+// P3-H13:删了 bash 重定向提取(EDIT_TOOL_PATTERNS 不含 bash,这段永不执行,死代码)。
+//   若以后 matcher 加 Bash 再加回。
 function extractFilePaths(toolName, input) {
   if (!input) return [];
   const out = [];
@@ -39,15 +41,6 @@ function extractFilePaths(toolName, input) {
   if (Array.isArray(input.edits)) {
     for (const e of input.edits) {
       if (e.file_path) out.push(String(e.file_path));
-    }
-  }
-  // bash: 尝试从命令里提取重定向目标(尽力,不完美)
-  if (/bash/i.test(toolName) && typeof input.command === 'string') {
-    // > file 或 >> file
-    const re = />{1,2}\s*([^\s|&;]+)/g;
-    let m;
-    while ((m = re.exec(input.command)) !== null) {
-      out.push(m[1]);
     }
   }
   return out;

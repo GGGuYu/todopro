@@ -119,23 +119,32 @@ function replace(dir, newTodos, sessionPatch) {
   }
 
   ensureDir(p.root);
+
+  // P0-H3:pause 恢复。若会话之前是 paused,且本次调用没显式设 paused/abandoned
+  // (即模型在做维护——传了新 todos,不是在 pause/abandon),自动恢复成 active。
+  // 这让 pause 不再是单向永久状态:模型再次维护 todo 即恢复监护。
+  const prevStatus = existing && existing.session ? existing.session.status : 'active';
+  const patchStatus = sessionPatch && sessionPatch.status;
+  const resumedStatus = (prevStatus === 'paused' && patchStatus !== 'paused' && patchStatus !== 'abandoned')
+    ? 'active' : prevStatus;
+
+  // P1-H6:session 只保留 status(计数字段 nudge_count/review_nudge_count/review_done
+  // 由独立的 session-state.json 维护,这里的死值会误导人/review 子 agent,删掉)。
   const data = {
     version: 1,
     created_at: (existing && existing.created_at) || nowIso(),
     todos: normalized,
-    session: Object.assign(
-      { status: 'active', review_done: false, nudge_count: 0, review_nudge_count: 0 },
-      existing && existing.session ? existing.session : {},
-      sessionPatch || {}
-    ),
+    session: {
+      status: patchStatus || resumedStatus || 'active',
+    },
   };
   fs.writeFileSync(p.todoJson, JSON.stringify(data, null, 2) + '\n', 'utf8');
 
-  // P1-4:全量替换若静默删除了旧项(oldTodos 比 newTodos 多),给调用方一个 warning。
-  // 落盘 + 被钩子 diff 追踪,静默删除会让"本轮推进"判断和 review 基于残缺数据。
-  // 不阻断(全量替换语义允许删),但提示模型注意是否漏带了项。
+  // P1-4:全量替换若静默删除了旧项,给调用方一个 warning。
+  // P1-4 残留修复:条件用 removedIds.length > 0(比 oldTodos.length > normalized.length 更准,
+  // 处理"删了又加"总数相等但仍删了项的场景)。
   let warning = null;
-  if (oldTodos.length > normalized.length) {
+  if (oldTodos.length > 0) {
     const removedIds = oldTodos
       .filter(t => !usedIds.has(t.id))
       .map(t => t.id);
@@ -167,6 +176,4 @@ module.exports = {
   allCompleted,
   hasPending,
   VALID_STATUS,
-  // 导出供测试
-  _nextId: nextId,
 };

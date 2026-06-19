@@ -57,13 +57,15 @@ function runTool(dir) {
     if (!EXIT_ACTIONS.has(action)) {
       throw new Error('invalid action: ' + action + ' (allowed: ' + Array.from(EXIT_ACTIONS).join(', ') + ')');
     }
+    // P2-H7:所有 action 都要求现存会话(含 acknowledge_stall)。
+    // 无会话时调 action 没意义,且避免凭空创建 session-state.json 垃圾文件。
+    const existing = todoStore.read(dir);
+    if (!existing) {
+      throw new Error('no active TodoPro session to ' + action);
+    }
     const patch = actionToSessionPatch(action);
     if (patch) {
-      // pause/abandon:改 session.status。需要有现存会话(否则没意义)。
-      const existing = todoStore.read(dir);
-      if (!existing) {
-        throw new Error('no active TodoPro session to ' + action);
-      }
+      // pause/abandon:改 session.status
       const { data } = todoStore.replace(dir, existing.todos, patch);
       todoMd.generate(dir, data);
     }

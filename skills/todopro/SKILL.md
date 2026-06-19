@@ -42,7 +42,7 @@ echo '{"todos":[
   {"id":"t1","content":"Add the /export endpoint","status":"in_progress","priority":"high"},
   {"id":"t2","content":"Wire up the CSV serializer","status":"pending","priority":"high"},
   {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
-]}' | node src/platforms/claude-code/todopro-tool.js
+]}' | node <todopro-tool>
 ```
 
 Later, after finishing t1, send the **whole** list again (keep ids stable so the guard can diff what changed):
@@ -52,7 +52,7 @@ echo '{"todos":[
   {"id":"t1","content":"Add the /export endpoint","status":"completed","priority":"high"},
   {"id":"t2","content":"Wire up the CSV serializer","status":"in_progress","priority":"high"},
   {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
-]}' | node src/platforms/claude-code/todopro-tool.js
+]}' | node <todopro-tool>
 ```
 
 The script prints a JSON result with `oldTodos`, the new `todos`, and `session`. Read it to confirm the write succeeded.
@@ -63,18 +63,18 @@ When the guard nudges you (you stopped without advancing the todo), pick one of 
 
 ```bash
 # Pause the whole session (long-term; guard stops until you resume)
-echo '{"action":"pause"}' | node src/platforms/claude-code/todopro-tool.js
+echo '{"action":"pause"}' | node <todopro-tool>
 
 # Abandon this requirement (direction was wrong)
-echo '{"action":"abandon"}' | node src/platforms/claude-code/todopro-tool.js
+echo '{"action":"abandon"}' | node <todopro-tool>
 
 # Acknowledge stall: knowingly didn't advance THIS turn; released for this turn, guard resumes next turn
-echo '{"action":"acknowledge_stall"}' | node src/platforms/claude-code/todopro-tool.js
+echo '{"action":"acknowledge_stall"}' | node <todopro-tool>
 ```
 
 All four calls (maintain + three exits) count as "advancing" and release you for the current turn. The difference: maintain keeps the session active; `pause`/`abandon` change the session status; `acknowledge_stall` just releases this turn and the guard resumes next turn.
 
-> **Tip:** if your shell quoting is tricky with the JSON, write the JSON to a temp file and pipe it: `cat /tmp/todopro.json | node src/platforms/claude-code/todopro-tool.js`.
+> **Tip:** if your shell quoting is tricky with the JSON, write the JSON to a temp file and pipe it: `cat /tmp/todopro.json | node <todopro-tool>`.
 
 ### Status values
 
@@ -99,7 +99,7 @@ echo '{"todos":[
   {"id":"t1","content":"Add the /export endpoint","status":"in_progress","priority":"high"},
   {"id":"t2","content":"Wire up the CSV serializer","status":"pending","priority":"high"},
   {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
-]}' | node src/platforms/claude-code/todopro-tool.js
+]}' | node <todopro-tool>
 ```
 
 Later, after finishing t1 (send the **whole** list again, keeping ids):
@@ -109,7 +109,7 @@ echo '{"todos":[
   {"id":"t1","content":"Add the /export endpoint","status":"completed","priority":"high"},
   {"id":"t2","content":"Wire up the CSV serializer","status":"in_progress","priority":"high"},
   {"id":"t3","content":"Add tests for export","status":"pending","priority":"medium"}
-]}' | node src/platforms/claude-code/todopro-tool.js
+]}' | node <todopro-tool>
 ```
 
 ## What the guard does (so you're not surprised)

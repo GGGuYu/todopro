@@ -49,10 +49,4 @@ function postToolUseEmit() {
   process.exit(0);
 }
 
-function isTodoProTool(toolName) {
-  if (!toolName) return false;
-  // Codex 的 todo 工具叫 update_plan(内置);我们的工具仍叫 TodoPro。
-  return /^todopro$/i.test(toolName);
-}
-
-module.exports = { readStdin, stopEmit, postToolUseEmit, isTodoProTool };
+module.exports = { readStdin, stopEmit, postToolUseEmit };

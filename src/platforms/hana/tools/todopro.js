@@ -1,15 +1,13 @@
 // src/platforms/hana/tools/todopro.js
 // HanaAgent 插件:TodoPro 工具定义(通过 Pi SDK registerTool 注册)。
-// 模型调用此工具实现全量替换 todo。复用共享 runTool 逻辑。
+// 模型调用此工具实现全量替换 todo 或表达三个明确出口。
+// 复用共享 runTool 逻辑(与 Claude Code/Codex 的 Bash 调用走同一套核心)。
 //
 // 安装:由 init.js 拷贝到 ${HANA_HOME}/plugins/todopro/tools/todopro.js
-// 此文件 export 一个工厂函数,接收 pi,注册工具。
+// 由 extensions/index.js 调用此模块注册工具(P0-H1 接线)。
 
 const path = require('path');
 
-// 解析核心模块路径:优先插件内 bundled,其次 TodoPro 仓库源(开发态)
-// 部署后:tools/todopro.js 的 __dirname = plugins/todopro/tools/
-//   .. → plugins/todopro/,core → plugins/todopro/core/ ✓
 function resolveCore(name) {
   const candidates = [
     path.join(__dirname, '..', 'core', name),                     // 插件内 bundled(部署态)
@@ -21,21 +19,18 @@ function resolveCore(name) {
   throw new Error('TodoPro core module not found: ' + name);
 }
 
-const { runTool } = require(resolveCore('run-todopro-tool'));
-
-// 工具工厂:pi.registerTool 注册 TodoPro 工具
-// Pi 的工具定义 schema 用 typebox(TSchema)。此处用简化的 JSON schema 描述。
+// 工具工厂:接收 pi,注册 TodoPro 工具。
+// P0-H1:由 extensions/index.js 调用此函数完成接线。
 module.exports = function registerTodoProTool(pi) {
   pi.registerTool({
     name: 'TodoPro',
-    description: 'Enhanced todo tool (full-replace semantics) with loop-exit guard and completion review. Use for multi-step/multi-file tasks instead of a plain todo list. Send the COMPLETE todo list each call (overwrites). Status: pending|in_progress|completed|paused|abandoned. Keep stable ids when modifying items. At most one in_progress at a time.',
-    // Pi 工具参数 schema(简化:todos 数组)。实际 Pi 用 typebox,此处用通用 JSON schema。
+    description: 'Enhanced todo tool (full-replace semantics) with loop-exit guard and completion review. Use for multi-step/multi-file tasks instead of a plain todo list. Two call modes: (1) maintain — send {"todos":[...]} full list (overwrites); (2) exit action — send {"action":"pause"|"abandon"|"acknowledge_stall"}. Status per todo: pending|in_progress|completed|paused|abandoned. Keep stable ids when modifying. At most one in_progress at a time.',
     parameters: {
       type: 'object',
       properties: {
         todos: {
           type: 'array',
-          description: 'Complete todo list (full-replace). Each: { id?, content, status, priority? }',
+          description: 'Complete todo list (full-replace). Each: { id?, content, status, priority? }. Use this for maintain exit.',
           items: {
             type: 'object',
             properties: {
@@ -47,29 +42,70 @@ module.exports = function registerTodoProTool(pi) {
             required: ['content', 'status'],
           },
         },
+        action: {
+          type: 'string',
+          enum: ['pause', 'abandon', 'acknowledge_stall'],
+          description: 'Exit action (use instead of todos). pause=suspend session, abandon=withdraw requirement, acknowledge_stall=knowingly skip this turn (guard resumes next).',
+        },
       },
-      required: ['todos'],
+      // todos 和 action 二选一,都不 required(由 handler 校验)
+      required: [],
     },
-    // 工具执行 handler
+    // P0-H2:handler 复用共享 runTool 逻辑,支持 todos 维护 + action 三出口。
+    // 与 Claude Code/Codex 的 Bash 调用走同一套核心(run-todopro-tool)。
     handler: async (args, context) => {
       try {
-        // runTool 从 stdin/argv 读,但插件内直接传参更干净。这里临时把 args.todos 写到
-        // 一个临时变量供 runTool 读——但 runTool 用 readInput() 读 stdin。
-        // 为复用,直接调核心 todoStore + md + sessionState。
         const todoStore = require(resolveCore('todo-store'));
         const todoMd = require(resolveCore('todo-md-mirror'));
         const sessionState = require(resolveCore('session-state'));
+        const { EXIT_ACTIONS, actionToSessionPatch } = require(resolveCore('run-todopro-tool'));
         const cwd = (context && context.cwd) || pi.cwd || process.cwd();
-        const { data, oldTodos } = todoStore.replace(cwd, args.todos);
+
+        // 路径 A:明确出口(action)
+        if (args && args.action) {
+          const action = args.action;
+          if (!EXIT_ACTIONS.has(action)) {
+            return { ok: false, error: 'invalid action: ' + action };
+          }
+          const patch = actionToSessionPatch(action);
+          if (patch) {
+            const existing = todoStore.read(cwd);
+            if (!existing) return { ok: false, error: 'no active TodoPro session to ' + action };
+            const { data } = todoStore.replace(cwd, existing.todos, patch);
+            todoMd.generate(cwd, data);
+          }
+          sessionState.markTodoWritten(cwd);
+          return {
+            ok: true,
+            action,
+            note: action === 'pause' ? '会话已暂停,监护停止。再次用 {todos:[...]} 维护即恢复。'
+                : action === 'abandon' ? '会话已放弃,运行时文件将在退出时清理。'
+                : '本轮知情停顿,已放行;下轮继续监护。',
+          };
+        }
+
+        // 路径 B:维护出口(todos 全量替换)
+        const todos = args && args.todos;
+        if (!Array.isArray(todos)) {
+          return { ok: false, error: 'input must have {todos:[...]} or {action:"..."}' };
+        }
+        const { data, oldTodos, warning } = todoStore.replace(cwd, todos);
         todoMd.generate(cwd, data);
         sessionState.markTodoWritten(cwd);
-        return {
+        // P0-H3:若会话之前是 paused,维护调用(传新 todos)自动恢复成 active
+        if (data.session.status === 'paused') {
+          const { data: d2 } = todoStore.replace(cwd, todos, { status: 'active' });
+          todoMd.generate(cwd, d2);
+        }
+        const result = {
           ok: true,
           oldTodos,
           todos: data.todos,
           session: data.session,
           note: 'todo.md 镜像已更新。继续干活;全部完成后会触发独立 review。',
         };
+        if (warning) result.warning = warning;
+        return result;
       } catch (e) {
         return { ok: false, error: e && e.message || String(e) };
       }

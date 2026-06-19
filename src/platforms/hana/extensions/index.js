@@ -43,9 +43,16 @@ const { runPostToolUse } = require(resolveCore('run-post-tool-use'));
 // Hana 上模型直接调 TodoPro 工具(非 Bash),占位替换为工具名提示。
 const TODO_TOOL_HINT = 'TodoPro 工具(直接调用,参数 {todos:[...]} 或 {action:"..."}）';
 
+// P0-H1:加载并注册 TodoPro 工具(tools/todopro.js)。
+// 早期版本只在 extensions 里注册事件,没调 registerTool,导致模型看不到工具(死代码)。
+const registerTodoProTool = require('../tools/todopro.js');
+
 // ExtensionFactory:Pi 加载插件时调用,参数为 ExtensionAPI
 module.exports = function (pi) {
   const cwd = pi.cwd || process.cwd();
+
+  // P0-H1:注册 TodoPro 工具(模型才能看到并调用)
+  registerTodoProTool(pi);
 
   // ─── turn_end ↔ Stop ───
   pi.on('turn_end', (event, context) => {

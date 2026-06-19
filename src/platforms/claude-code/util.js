@@ -35,16 +35,6 @@ function stopOutput({ block, injectText, reason }) {
 }
 
 // 组装 PostToolUse 的输出:allow(可注入 additionalContext)
-function postToolUseOutput({ injectText }) {
-  if (!injectText) return {};
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PostToolUse',
-      additionalContext: injectText,
-    },
-  };
-}
-
 // 输出 JSON 并以 exit 0 退出(Claude Code 仅在 exit 0 时处理 JSON)
 function emit(obj) {
   if (obj && Object.keys(obj).length > 0) {
@@ -53,17 +43,8 @@ function emit(obj) {
   process.exit(0);
 }
 
-// Claude Code 工具名归一化:判断是否为 TodoPro 工具 / 编辑类工具
-function isTodoProTool(toolName) {
-  if (!toolName) return false;
-  // 我们的工具名约定为 TodoPro(全量替换语义)。各平台可能大小写不同。
-  return /^todopro$/i.test(toolName);
-}
-
 module.exports = {
   readStdin,
   stopOutput,
-  postToolUseOutput,
   emit,
-  isTodoProTool,
 };

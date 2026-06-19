@@ -177,5 +177,35 @@ test('R8 模型用内置 TodoWrite 不调我们的脚本 → 无 .todopro → St
   assert.ok(!fs.existsSync(process.env.TODOPRO_DIR), '不应创建 .todopro');
 });
 
+// R10:P1-2 残留——review 引导后起非 review 子 agent 会被误判(已知限制,靠提示词约束 + 熔断)
+// 记录这个限制:review_pending=true 时任何子 agent 都算 review。reviewGuide 提示词约束"只起 review 子 agent"。
+test('R10 review引导后起子agent → 算review完成(已知限制,提示词已约束只起review子agent)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'completed' }] });
+  resetRound();
+  const out1 = stopHook(DIR); // review-nudge → review_pending=true
+  assert.ok(out1.includes('独立 review'), '应引导 review');
+  assert.ok(out1.includes('只起这一个 review 子 agent'), '提示词应约束只起 review 子 agent');
+  // review_pending=true 时起子 agent → 算 review 完成(限制:无法区分用途)
+  subagentStop(DIR);
+  const out2 = stopHook(DIR);
+  assert.ok(!out2.includes('"decision":"block"'), 'review_pending 时起子agent算 review 完成(已知限制)');
+});
+
+// R11:H4 回归——字面字符串(grep todopro-tool.js)不应被误判为推进
+test('R11 grep/cat 含 todopro-tool.js 字面字符串 → 不算推进(正则要求 node 调用)', () => {
+  fresh(DIR);
+  modelCallsTodoProViaBash(DIR, { todos: [{ content: 'a', status: 'in_progress' }] });
+  resetRound();
+  // 模拟跑了个 grep 命令(含 todopro-tool.js 字符串,但不是 node 调用)
+  const ptuPayload = {
+    cwd: DIR, hook_event_name: 'PostToolUse', tool_name: 'Bash',
+    tool_input: { command: 'grep -r todopro-tool.js .' },
+  };
+  execSync(`echo '${JSON.stringify(ptuPayload).replace(/'/g, "'\\''")}' | node "${path.join(ROOT, 'src/platforms/claude-code/post-tool-use.js')}"`, { env: process.env, stdio: ['pipe', 'ignore', 'ignore'] });
+  const out = stopHook(DIR);
+  assert.ok(out.includes('"decision":"block"'), 'grep 不算推进,应阻断');
+});
+
 console.log('\n结果:' + PASS + ' 通过, ' + FAIL + ' 失败');
 process.exit(FAIL === 0 ? 0 : 1);

@@ -378,8 +378,9 @@ tests/            ← closed-loop(Claude Code 闭环)+ cross-platform(一致性)
 **红线**:
 - **不要**在 Claude Code/Codex 上假设有 "TodoPro" 注册工具。模型靠 Bash 调脚本。
 - **不要**把 PostToolUse matcher 改回 `"TodoPro"`——那永远不触发。必须是 `Bash`/`shell`,靠命令内容识别。
-- `isTodoProCall` 的正则 `/todopro-tool\.js/` 是识别关键,改脚本名要同步改正则。
-- Hana 是例外:它用 `pi.registerTool` 注册了真工具,`isTodoProCall` 也识别工具名 `TodoPro`。两条路径共存。
+- `isTodoProCall` 的正则 `/node\s+\S*todopro-tool\.js/` 是识别关键(P1-H4 收紧:要求 node 调用,不是字面出现,防 grep 误判),改脚本名要同步改正则。
+- Hana 是例外:它用 `pi.registerTool` 注册了真工具(P0-H1 已接线:extensions/index.js 调 `registerTodoProTool(pi)`),`isTodoProCall` 也识别工具名 `TodoPro`。三条路径共存。
+- **review_pending 限制**(P1-2 残留):review 引导后起的任何子 agent 都算 review 完成(钩子无法区分子 agent 用途)。靠 reviewGuide 提示词约束"本轮只起 review 子 agent"+ 熔断兜底。这是已知限制,不要试图在钩子层做用途区分(做不到)。
 
 **测试教训**:tests/closed-loop.test.js 早期直接 `echo JSON | node todopro-tool.js` 调脚本,**绕过了"模型怎么调到工具"这层**,所以全绿但实际跑不通。tests/real-path.test.js 修复了这个断层:模拟模型用 Bash 工具调用(真实执行 + 触发 PostToolUse(Bash) 让钩子识别)。**加新功能时,测试必须走真实路径,不能绕过工具可达层。**
 
@@ -498,17 +499,21 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 4. 两平台推进后均放行
 5. 所有 .js 仅 require Node 内置或内部模块(零 npm 依赖)
 
-### real-path.test.js(8 项)——真实路径,不绕过工具可达层
-1. 模型经 Bash 调 todopro-tool 建 todo → Stop 放行(推进标志被识别)
-2. 本轮没调 TodoPro 脚本 → Stop 阻断+四选一(提示词含 Bash 调用说明)
-3. 被 nudge 后模型经 Bash 调 acknowledge_stall → 放行(session 仍 active)
-4. 模型经 Bash 调 pause → session.paused → Stop 放行不监护
-5. 模型经 Bash 调 abandon → session.abandoned → Stop 放行+清理
-6. 普通 Bash 命令(非 todopro-tool)不置推进标志 → Stop 仍判定没推进
-7. 全完成经 Bash → review 引导 → 子 agent → 放行+清理
-8. 模型用内置 TodoWrite 不调我们的脚本 → 无 .todopro → Stop 纯放行
+### real-path.test.js(11 项)——真实路径,不绕过工具可达层
+1-8:模型经 Bash 调用建 todo / 四选一 / acknowledge_stall / pause / abandon / 普通 bash 不算推进 / review 引导 / 优雅退化
+9. 非 review 轮起的探索子 agent 不算 review 完成(仍阻断)
+10. review 引导后起子 agent 算 review 完成(已知限制,提示词约束)
+11. grep/cat 含 todopro-tool.js 字面字符串不算推进(正则要求 node 调用)
 
-**改代码后必跑这三套**(`closed-loop` + `cross-platform` + `real-path`)。加新平台或改决策逻辑,补对应测试。**真实路径测试(real-path)不能省**——它守着"模型真能调到工具"这层,closed-loop 测试绕过了这层会假绿。
+### hana-plugin.test.js(4 项)——Hana 插件真实 require(修元问题)
+1. extensions/index.js 加载时调用 registerTool(P0-H1 接线验证)
+2. handler 支持 todos 维护出口
+3. handler 支持 action 出口(pause/abandon/acknowledge_stall)
+4. schema 同时支持 todos 和 action(不互斥 required)
+
+**改代码后必跑这四套**(`closed-loop` + `cross-platform` + `real-path` + `hana-plugin`)。加新平台或改决策逻辑,补对应测试。**真实路径测试(real-path / hana-plugin)不能省**——它们守着"模型真能调到工具"这层,closed-loop 测试绕过了这层会假绿。
+
+**开发纪律**(reviewer 元建议):每修一个 bug,先写能复现原 bug 的失败测试,再修到绿。本轮修 P0-H1(先写 hana-plugin.test.js 复现"工具没注册"→ 修到绿)、P1-H4(先写 R11 复现"grep 误判推进"→ 修到绿)都遵循了这个纪律。不要直接改代码再补测试——那样测试只会验证你的修复,不会复现原 bug。
 
 ---
 
@@ -524,17 +529,21 @@ node tests/cross-platform.test.js   # 跨平台一致性 5 项
 
 4. **acknowledge_stall 与 pause 的提示词区分**:当前靠文字说明,实现后观察模型是否选对,调参。注意 acknowledge_stall 是轮级意图(经 action 调用,不改 session.status),不是会话级状态——若误设成 session.status,decide-stop 防御性当作 active 处理(不僵死)。
 
-5. **Hana 适配层未经实机验证**:extensions/index.js 基于 Pi SDK 事件签名写,但 Hana 的 `agent_end` 在主 agent 也触发、`turn_end` 不能阻止停止等差异,需在真实 Hana 环境跑一遍校准。Claude Code 和 Codex 的适配层已端到端验证。
+5. **pause 恢复**(P0-H3):pause 不是单向永久状态。模型 pause 后,再次用 `{todos:[...]}` 维护即自动恢复 active(todo-store.replace 检测:prevStatus=paused 且本次非 pause/abandon patch → 恢复 active)。早期版本 pause 后无法恢复(僵死),已修。
 
-6. **Codex 的 TOML hooks 配置格式**:init.js 追加的 `[[hooks.stop]]` 段基于动机文档 3.3 的 schema,实际 Codex 版本的 TOML 字段名可能微调,装时验证。路径用 TOML 字面字符串(单引号)包裹,含空格安全(P2-5 已修)。
+6. **Hana 适配层已接线但未实机验证**(P0-H1+H5):extensions/index.js 已调 `registerTodoProTool(pi)` 注册工具(P0-H1 修复),tests/hana-plugin.test.js 用 mock pi 真实 require 验证(P0-H5 修复元问题)。但 Hana 的 `agent_end` 在主 agent 也触发、`turn_end` 不能阻止停止等差异,仍需真实 Hana 环境跑一遍校准。Claude Code 和 Codex 已端到端验证。
 
-7. **覆盖率**:走"用我们的工具才触发"路线,Claude Code 上模型用内置 TodoWrite 时整套机制不生效。这是接受的优雅退化。提高覆盖率靠 SKILL.md description,不靠拦内置 todo。
+7. **Codex 的 TOML hooks 配置格式**:init.js 追加的 `[[hooks.stop]]` 段基于动机文档 3.3 的 schema,实际 Codex 版本的 TOML 字段名可能微调,装时验证。路径用 TOML 字面字符串(单引号)包裹,含空格安全(P2-5 已修)。
 
-8. **Codex 放行提示对模型不可见**(P2-2):Codex 的 stop 钩子,阻断时 exit 2 + stderr(stderr 当续跑提示注入对话,模型可见 ✓);但**放行时**(熔断交还用户 / review 完成确认 / review 跳过)exit 0,提示词只进 stderr 日志,**模型看不到**。这是 Codex 的限制(exit 0 不注入对话),与 Claude Code(additionalContext 可见)行为不一致。接受——放行提示本质是给用户看的收尾,模型不需要据此行动。改的话要 exit 2 续跑一次只为送提示,代价大不划算。
+8. **覆盖率**:走"用我们的工具才触发"路线,Claude Code 上模型用内置 TodoWrite 时整套机制不生效。这是接受的优雅退化。提高覆盖率靠 SKILL.md description,不靠拦内置 todo。
 
-9. **review-subagent-prompt.md 不入库**(P2-4):`.gitignore` 忽略 `.todopro/*`(除 README),所以 `.todopro/review-subagent-prompt.md` 不入库。源文件在 `skills/todopro/review-subagent-prompt.md`,**由 init 拷贝到 `.todopro/`**。新克隆者必须跑 init 才有这个文件。文档反复说"预置到 .todopro/"指的就是这个拷贝动作,不是入库。
+9. **Codex 放行提示对模型不可见**(P2-2):Codex 的 stop 钩子,阻断时 exit 2 + stderr(stderr 当续跑提示注入对话,模型可见 ✓);但**放行时**(熔断交还用户 / review 完成确认 / review 跳过)exit 0,提示词只进 stderr 日志,**模型看不到**。这是 Codex 的限制(exit 0 不注入对话),与 Claude Code(additionalContext 可见)行为不一致。接受——放行提示本质是给用户看的收尾,模型不需要据此行动。改的话要 exit 2 续跑一次只为送提示,代价大不划算。
 
-10. **Hana 无等价行为测试**(P3-5):跨平台一致性测试(cross-platform.test.js 12.2)只验证 Claude Code 与 Codex 决策等价,Hana 需 Pi 运行时无法在纯 Node 测试里跑。所谓"三平台一致性"实际只验证了两平台 + Hana 的代码静态检查(require 同一份 core)。Hana 的真实行为需实机验证(见限制 5)。
+10. **review-subagent-prompt.md 不入库**(P2-4):`.gitignore` 忽略 `.todopro/*`(除 README),所以 `.todopro/review-subagent-prompt.md` 不入库。源文件在 `skills/todopro/review-subagent-prompt.md`,**由 init 拷贝到 `.todopro/`**。新克隆者必须跑 init 才有这个文件。文档反复说"预置到 .todopro/"指的就是这个拷贝动作,不是入库。
+
+11. **Hana 无等价行为测试**(P3-5 已部分修):tests/hana-plugin.test.js 用 mock pi 真实 require extensions/index.js,验证 registerTool 被调、handler 跑通 todos/action 出口。但这是 mock,真实 Pi 运行时的行为(事件触发时机、sendUserMessage 续跑)仍需实机验证。cross-platform.test.js 12.2 只验证 Claude Code 与 Codex 决策等价。所谓"三平台一致性"实际验证了两平台端到端 + Hana 的 mock 测试。
+
+12. **review 子 agent 用途限制**(P1-2 残留):review 引导后(review_pending=true),起的任何子 agent 都算 review 完成——钩子无法区分子 agent 是 review 还是探索。靠 reviewGuide 提示词约束"本轮只起 review 子 agent"+ review 熔断兜底。tests/real-path.test.js R10 记录此限制。这是设计层面的固有限制,不要试图在钩子层做用途区分。
 
 ---
 

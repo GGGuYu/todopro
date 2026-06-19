@@ -114,14 +114,6 @@ function bumpNudge(dir) {
   return s;
 }
 
-// review 后主 agent 新增 todo(去修 review 发现的问题):给新一轮 review 机会
-function resetReviewNudge(dir) {
-  const s = ensure(dir);
-  s.review_nudge_count = 0;
-  write(dir, s);
-  return s;
-}
-
 // Stop 放行后复位轮标志(为下一轮准备)。
 // P1-2:复位 review_pending(下轮若需 review 会重新 markReviewPending)。
 function resetRoundFlags(dir) {
@@ -147,7 +139,6 @@ module.exports = {
   markReviewDone,
   bumpReviewNudge,
   bumpNudge,
-  resetReviewNudge,
   resetRoundFlags,
   NUDGE_LIMIT,
   REVIEW_NUDGE_LIMIT,
